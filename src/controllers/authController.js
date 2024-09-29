@@ -80,15 +80,20 @@ const login = asyncHand((req, res) => {
         });
 
         console.log("Generated Token:", token);
-
         const refreshToken = generateRefreshToken(email);
+
         console.log("Refresh Token:", refreshToken);
 
         res.cookie("token", token, {
           httpOnly: true,
+          secure: true,
+          sameSite: "None",
         });
-
-        res.cookie("refreshToken", refreshToken, { httpOnly: true });
+        res.cookie("refreshToken", refreshToken, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "None",
+        });
 
         res.status(200).json({
           message: "Logged in successfully",
@@ -119,8 +124,16 @@ const refresh = asyncHand((req, res) => {
   console.log("New Access Token:", token);
   console.log("New Refresh Token:", newRefreshToken);
 
-  res.cookie("token", token, { httpOnly: true });
-  res.cookie("refreshToken", newRefreshToken, { httpOnly: true });
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "None",
+  });
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "None",
+  });
   res.sendStatus(200);
 });
 
