@@ -1,5 +1,5 @@
 require("dotenv").config();
-const allowedOrigins = ["https://tripto-client.vercel.app/"];
+const allowedOrigins = [process.env.CORS_URL];
 
 const corsOptions = {
   origin: (origin, callback) => {
