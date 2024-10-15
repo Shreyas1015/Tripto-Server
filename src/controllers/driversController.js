@@ -71,7 +71,7 @@ const drivers_document_auth = asyncHand((req, res) => {
 
 const driversDocumentUpload = asyncHand(async (req, res) => {
   authenticateUser(req, res, () => {
-    const formData = req.body;
+    const formData = req.body.formData;
 
     const selectQuery = "SELECT * FROM drivers WHERE uid = ?";
     connection.query(selectQuery, [formData.uid], (selectErr, selectResult) => {
@@ -190,6 +190,7 @@ const fetchParticularDocStatus = asyncHand((req, res) => {
         res.status(500).json({ error: "Internal Server error" });
       }
       if (result.length > 0) {
+        console.log("Doc Status :", result[0]);
         res.status(200).json(result[0]);
       } else {
         res
@@ -356,7 +357,7 @@ const uploadProfileImage = asyncHand(async (req, res) => {
 
 const uploadCarDetails = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
-    const formData = req.body;
+    const formData = req.body.carDetails;
 
     const isValidCarNumberFormat = (carNumber) => {
       const carNumberRegex = /^[A-Za-z]{2}\d{2}[A-Za-z]{2}\d{4}$/;
@@ -523,7 +524,11 @@ const fetchDcdID = asyncHand((req, res) => {
         console.error("Fetch dcd_id Error: ", err);
         return res.status(500).json({ error: "Server Error" });
       } else {
-        res.status(200).json(result[0].dcd_id);
+        if (result.length === 0) {
+          res.status(404).json({ message: "No DCD ID Found" });
+        } else {
+          res.status(200).json(result[0].dcd_id);
+        }
       }
     });
   });
