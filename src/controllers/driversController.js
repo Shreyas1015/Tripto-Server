@@ -73,6 +73,23 @@ const driversDocumentUpload = asyncHand(async (req, res) => {
   authenticateUser(req, res, () => {
     const formData = req.body.formData;
 
+    // Define the list of fields that should have the corresponding _updated_at timestamp
+    const documentFields = [
+      "aadharFront",
+      "aadharBack",
+      "panCardFront",
+      "selfie",
+      "passbookOrCheque",
+      "rc",
+      "puc",
+      "insurance",
+      "permit",
+      "fitnessCertificate",
+      "taxReceipt",
+      "drivingLicenseFront",
+      "drivingLicenseBack",
+    ];
+
     const selectQuery = "SELECT * FROM drivers WHERE uid = ?";
     connection.query(selectQuery, [formData.uid], (selectErr, selectResult) => {
       if (selectErr) {
@@ -80,15 +97,24 @@ const driversDocumentUpload = asyncHand(async (req, res) => {
         res.status(500).json({ message: "Internal Server Error" });
       } else {
         if (selectResult.length > 0) {
+          // Generate the update query fields
           const updateFields = Object.keys(formData)
             .filter((key) => formData[key] !== null)
-            .map((key) => `${key} = ?`)
+            .map((key) => {
+              // Check if the field is in the documentFields list and should have an _updated_at timestamp
+              if (documentFields.includes(key)) {
+                return `${key} = ?, ${key}_updated_at = NOW()`;
+              }
+              return `${key} = ?`;
+            })
             .join(", ");
 
+          // Update values excluding null values
           const updateValues = Object.values(formData).filter(
             (value) => value !== null
           );
 
+          // Add the uid for the WHERE clause
           updateValues.push(formData.uid);
 
           const updateQuery = `
@@ -116,21 +142,49 @@ const driversDocumentUpload = asyncHand(async (req, res) => {
             }
           );
         } else {
-          const insertQuery = "INSERT INTO drivers SET ?";
-          connection.query(insertQuery, formData, (insertErr, insertResult) => {
-            if (insertErr) {
-              console.error(
-                `Error in inserting data to the table: ${insertErr}`
-              );
-              res.status(500).json({ message: "Internal Server Error" });
-            } else {
-              console.log(insertResult);
-              console.log("Documents Uploaded Successfully");
-              res
-                .status(200)
-                .json({ message: "Documents Uploaded Successfully" });
+          // Insert new records, excluding _updated_at fields for uid and dcd_id
+          const insertData = { ...formData };
+
+          // Add _updated_at timestamps for the specific document fields
+          const insertFields = [];
+          const insertPlaceholders = [];
+          const insertValues = [];
+
+          for (const [key, value] of Object.entries(insertData)) {
+            insertFields.push(key);
+            insertPlaceholders.push("?");
+            insertValues.push(value);
+
+            // If the key is in the documentFields list, add an _updated_at field
+            if (documentFields.includes(key)) {
+              insertFields.push(`${key}_updated_at`);
+              insertPlaceholders.push("NOW()");
             }
-          });
+          }
+
+          const insertQuery = `
+            INSERT INTO drivers (${insertFields.join(", ")})
+            VALUES (${insertPlaceholders.join(", ")})
+          `;
+
+          connection.query(
+            insertQuery,
+            insertValues,
+            (insertErr, insertResult) => {
+              if (insertErr) {
+                console.error(
+                  `Error in inserting data to the table: ${insertErr}`
+                );
+                res.status(500).json({ message: "Internal Server Error" });
+              } else {
+                console.log(insertResult);
+                console.log("Documents Uploaded Successfully");
+                res
+                  .status(200)
+                  .json({ message: "Documents Uploaded Successfully" });
+              }
+            }
+          );
         }
       }
     });
@@ -179,7 +233,20 @@ const fetchParticularDocStatus = asyncHand((req, res) => {
         taxReceiptStatus,
         drivingLicenseFrontStatus,
         drivingLicenseBackStatus,
-        all_documents_status
+        all_documents_status,
+        aadharFrontRejectReason,
+        aadharBackRejectReason,
+        panCardFrontRejectReason,
+        selfieRejectReason,
+        passbookOrChequeRejectReason,
+        rcRejectReason,
+        pucRejectReason,
+        insuranceRejectReason,
+        permitRejectReason,
+        fitnessCertificateRejectReason,
+        taxReceiptRejectReason,
+        drivingLicenseFrontRejectReason,
+        drivingLicenseBackRejectReason
       FROM drivers
       WHERE uid = ?
     `;
@@ -625,7 +692,7 @@ const fetchBookingsDataTable = asyncHand((req, res) => {
 
 const driverAcceptBooking = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
-    const { decryptedUID, bid, bookingsData } = req.body;
+    const { decryptedUID, booking } = req.body;
 
     const query1 = "SELECT did, dcd_id FROM drivers WHERE uid = ?";
     connection.query(query1, decryptedUID, (err1, result1) => {
@@ -648,12 +715,12 @@ const driverAcceptBooking = asyncHand((req, res) => {
           } else {
             const carType = result2[0].car_type;
 
-            if (carType == bookingsData.selected_car) {
+            if (carType == booking.selected_car) {
               const updateQuery =
                 "UPDATE bookings SET did = ?, dcd_id = ?, trip_status = 1 WHERE bid = ?";
               connection.query(
                 updateQuery,
-                [did, dcd_id, bid],
+                [did, dcd_id, booking.bid],
                 (err3, result3) => {
                   if (err3) {
                     console.error("Internal Server Error: ", err3);
