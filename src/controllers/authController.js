@@ -271,6 +271,7 @@ const confirmEmail = asyncHand(async (req, res) => {
 //     return res.status(400).json({ error: "Invalid phone OTP or OTP expired" });
 //   }
 // });
+// const sendPhoneVerification = asyncHand(async (req, res) => {
 
 const signUp = asyncHand(async (req, res) => {
   const formData = req.body;
