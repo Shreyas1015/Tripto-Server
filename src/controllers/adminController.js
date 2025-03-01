@@ -92,6 +92,11 @@ const handleDocumentStatusChange = asyncHand((req, res) => {
       return res.status(400).json({ error: "Invalid documentKey" });
     }
 
+    const reasonUpdatedAtColumn = `${documentKey.replace(
+      "Status",
+      "Reason_updated_at"
+    )}`;
+
     const selectQuery = `SELECT * FROM users AS u JOIN drivers AS d ON d.uid = u.uid WHERE d.did = ?`;
     connection.query(selectQuery, [driverId], (err, result) => {
       if (err) {
@@ -101,19 +106,41 @@ const handleDocumentStatusChange = asyncHand((req, res) => {
         if (result.length === 0) {
           res.status(404).json({ error: "Driver not found" });
         } else {
-          const updateQuery = `UPDATE drivers SET ?? = ?, ?? = ?, reason_updated_at = NOW() WHERE did = ?`;
+          const updateQuery = `UPDATE drivers SET ?? = ?, ?? = ?, ?? = NOW() WHERE did = ?`;
           connection.query(
             updateQuery,
-            [documentKey, newStatus, rejectReasonColumn, reason, driverId],
+            [
+              documentKey,
+              newStatus,
+              rejectReasonColumn,
+              reason,
+              reasonUpdatedAtColumn,
+              driverId,
+            ],
             (updateErr, updateResult) => {
               if (updateErr) {
                 console.error("Internal Server Error", updateErr);
                 res.status(500).json({ error: "Internal Server Error" });
               } else {
-                console.log(updateResult);
-                res
-                  .status(200)
-                  .json({ message: "Document status updated successfully" });
+                const fetchUpdatedRowQuery = `SELECT * FROM drivers WHERE did = ?`;
+                connection.query(
+                  fetchUpdatedRowQuery,
+                  [driverId],
+                  (fetchErr, fetchResult) => {
+                    if (fetchErr) {
+                      console.error("Internal Server Error", fetchErr);
+                      res.status(500).json({ error: "Internal Server Error" });
+                    } else {
+                      console.log("Updated Row:", fetchResult);
+                      res
+                        .status(200)
+                        .json({
+                          message: "Document status updated successfully",
+                          updatedRow: fetchResult,
+                        });
+                    }
+                  }
+                );
               }
             }
           );
