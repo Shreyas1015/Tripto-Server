@@ -14,8 +14,8 @@ const transporter = nodemailer.createTransport({
   service: "gmail",
   port: 465,
   secure: true,
-  logger: true,
-  debug: true,
+  // logger: true,
+
   secureConnection: false,
   auth: {
     user: process.env.TRANSPORTER_EMAIL,
@@ -275,43 +275,54 @@ const confirmEmail = asyncHand(async (req, res) => {
 
 const signUp = asyncHand(async (req, res) => {
   const formData = req.body;
-
-  console.log("Form Data:", formData);
+  console.log("Received Sign-Up Request:", formData);
 
   try {
-    // Check if the user already exists
+    // 1. Check if the user already exists
     const searchQuery = "SELECT * FROM users WHERE email = ?";
     connection.query(searchQuery, [formData.email], async (err, result) => {
       if (err) {
+        console.error("Database Query Error:", err);
         return handleServerError(res, "Error running the query: " + err);
       }
 
       if (result.length > 0) {
+        console.log("User already exists:", formData.email);
         return handleUserExists(res);
       }
 
-      // User does not exist, proceed with insertion
+      // 2. Insert into Users Table
       const insertUserQuery =
         "INSERT INTO users (name, email, phone_number, user_type) VALUES (?, ?, ?, ?)";
+
       connection.query(
         insertUserQuery,
         [
           formData.name,
           formData.email,
           formData.phone_number,
-          formData.user_type,
+          parseInt(formData.user_type, 10), // Ensure correct data type
         ],
         (err, userResult) => {
           if (err) {
+            console.error("Error inserting into users:", err);
             return handleServerError(
               res,
               "Error inserting data into users: " + err
             );
           }
 
-          if (formData.user_type === 2) {
+          console.log(
+            "User Inserted Successfully. User ID:",
+            userResult.insertId
+          );
+
+          // 3. Insert into Passengers or Vendors Table
+          if (parseInt(formData.user_type, 10) === 2) {
+            console.log("Registering as Passenger...");
             const insertPassengerQuery =
               "INSERT INTO passengers (uid, name, email, phone_number, profile_img) VALUES (?, ?, ?, ?, ?)";
+
             connection.query(
               insertPassengerQuery,
               [
@@ -323,25 +334,59 @@ const signUp = asyncHand(async (req, res) => {
               ],
               (err) => {
                 if (err) {
+                  console.error("Error inserting into passengers:", err);
                   return handleServerError(
                     res,
                     "Error inserting data into passengers: " + err
                   );
-                } else {
-                  return handleSuccess(
+                }
+                console.log("User and Passenger Registered Successfully");
+                return handleSuccess(
+                  res,
+                  "User and Passenger Registered Successfully"
+                );
+              }
+            );
+          } else if (parseInt(formData.user_type, 10) === 4) {
+            console.log("Registering as Vendor...");
+            const insertVendorQuery =
+              "INSERT INTO vendors (uid, name, email, phone_number, profile_img) VALUES (?, ?, ?, ?, ?)";
+
+            connection.query(
+              insertVendorQuery,
+              [
+                userResult.insertId,
+                formData.name,
+                formData.email,
+                formData.phone_number,
+                formData.profile_img || null,
+              ],
+              (err) => {
+                if (err) {
+                  console.error("Error inserting into vendors:", err);
+                  return handleServerError(
                     res,
-                    "User and Passenger Registered Successfully"
+                    "Error inserting data into vendors: " + err
                   );
                 }
+                console.log("User and Vendor Registered Successfully");
+                return handleSuccess(
+                  res,
+                  "User and Vendor Registered Successfully"
+                );
               }
             );
           } else {
+            console.log(
+              "User Registered Successfully (No Passenger/Vendor Entry)"
+            );
             return handleSuccess(res, "User Registered Successfully");
           }
         }
       );
     });
   } catch (error) {
+    console.error("Unexpected Error:", error);
     return handleServerError(res, "Error inserting data: " + error);
   }
 });

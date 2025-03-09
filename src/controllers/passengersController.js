@@ -9,8 +9,7 @@ const transporter = nodemailer.createTransport({
   service: "gmail",
   port: 465,
   secure: true,
-  logger: true,
-  debug: true,
+  // logger: true,
   secureConnection: false,
   auth: {
     user: process.env.TRANSPORTER_EMAIL,
@@ -185,21 +184,46 @@ const sendProfileUpdateEmailVerification = asyncHand(async (req, res) => {
   });
 });
 
-const fetchProfileIMG = asyncHand((req, res) => {
-  authenticateUser(req, res, () => {
+// const fetchProfileIMG = asyncHand((req, res) => {
+//   authenticateUser(req, res, () => {
+//     const { decryptedUID } = req.body;
+
+//     const query = "select profile_img from passengers where uid = ? ";
+//     connection.query(query, [decryptedUID], (err, result) => {
+//       if (err) {
+//         console.error(`Failed to execute ${query}`, err);
+//         res.status(500).json({ message: "Internal Server Error" });
+//       } else {
+//         console.log("Image link fetched", result[0].profile_img);
+//         res.status(200).json({ link: result[0] });
+//       }
+//     });
+//   });
+// });
+
+const fetchProfileIMG = asyncHand(async (req, res) => {
+  try {
+    await authenticateUser(req, res);
     const { decryptedUID } = req.body;
 
-    const query = "select profile_img from passengers where uid = ? ";
+    const query = "SELECT profile_img FROM passengers WHERE uid = ?";
     connection.query(query, [decryptedUID], (err, result) => {
       if (err) {
         console.error(`Failed to execute ${query}`, err);
-        res.status(500).json({ message: "Internal Server Error" });
-      } else {
-        console.log("Image link fetched", result[0].profile_img);
-        res.status(200).json({ link: result[0] });
+        return res.status(500).json({ message: "Internal Server Error" });
       }
+
+      if (result.length === 0) {
+        return res.status(404).json({ message: "Profile image not found" });
+      }
+
+      console.log("Image link fetched", result[0].profile_img);
+      res.status(200).json({ link: result[0] });
     });
-  });
+  } catch (error) {
+    console.error("Error fetching profile image:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 });
 
 const uploadProfileImage = asyncHand(async (req, res) => {

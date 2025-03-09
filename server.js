@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./src/routes/authRoute");
 const driversRoute = require("./src/routes/driversRoute");
+const vendorRoute = require("./src/routes/vendorRoute");
 const passengersRoute = require("./src/routes/passengersRoute");
 const adminRoute = require("./src/routes/adminRoute");
 const cookieParser = require("cookie-parser");
@@ -21,6 +22,7 @@ app.use("/auth", authRoutes);
 app.use("/drivers", driversRoute);
 app.use("/passengers", passengersRoute);
 app.use("/admin", adminRoute);
+app.use("/vendor", vendorRoute);
 
 app.use(errorMiddleware);
 
