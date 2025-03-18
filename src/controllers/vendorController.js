@@ -261,6 +261,167 @@ const updateProfile = asyncHand((req, res) => {
     });
   });
 });
+const fetchParticularDocStatus = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+
+    const query = `
+      SELECT aadharFrontStatus, aadharBackStatus, panCardFrontStatus, udyamAadharStatus, ghumastaLicenseStatus, profilePhotoStatus, all_documents_status, 
+             aadharFrontRejectReason, aadharBackRejectReason, panCardFrontRejectReason, profilePhotoRejectReason, udyamAadharRejectReason, ghumastaLicenseRejectReason, 
+             aadharFront_updated_at, aadharBack_updated_at, panCardFront_updated_at, profilePhoto_updated_at, udyamAadhar_updated_at, ghumastaLicense_updated_at, 
+             aadharFrontReason_updated_at, aadharBackReason_updated_at, panCardFrontReason_updated_at, profilePhotoReason_updated_at, udyamAadharReason_updated_at, ghumastaLicenseReason_updated_at
+      FROM vendors
+      WHERE uid = ?
+    `;
+
+    connection.query(query, [decryptedUID], (err, result) => {
+      if (err) {
+        console.error("Internal Server error:", err);
+        return res.status(500).json({ error: "Internal Server error" }); // ✅ return added
+      }
+
+      if (result.length > 0) {
+        console.log("Doc Status :", result[0]);
+        return res.status(200).json(result[0]); // ✅ return added
+      } else {
+        return res
+          .status(404)
+          .json({ message: "Status indicators not found for the given UID" }); // ✅ return added
+      }
+    });
+  });
+});
+
+const fetchDocLinks = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+    console.log(decryptedUID);
+    const query = "select * from vendors where uid = ?";
+    connection.query(query, [decryptedUID], (err, result) => {
+      if (err) {
+        console.error("Fetch Doc Links Error: ", err);
+        return res.status(500).json({ error: "Server Error" });
+      } else {
+        res.status(200).json(result[0]);
+      }
+    });
+  });
+});
+
+const documentUpload = asyncHand(async (req, res) => {
+  authenticateUser(req, res, () => {
+    const formData = req.body.formData;
+
+    // Define the list of fields that should have the corresponding _updated_at timestamp
+    const documentFields = [
+      "aadharFront",
+      "aadharBack",
+      "panCardFront",
+      "profilePhoto",
+      "udyamAadhar",
+      "ghumastaLicense",
+    ];
+
+    const selectQuery = "SELECT * FROM vendors WHERE uid = ?";
+    connection.query(selectQuery, [formData.uid], (selectErr, selectResult) => {
+      if (selectErr) {
+        console.error(`Error in selecting data from the table: ${selectErr}`);
+        res.status(500).json({ message: "Internal Server Error" });
+      } else {
+        if (selectResult.length > 0) {
+          // Generate the update query fields
+          const updateFields = Object.keys(formData)
+            .filter((key) => formData[key] !== null)
+            .map((key) => {
+              // Check if the field is in the documentFields list and should have an _updated_at timestamp
+              if (documentFields.includes(key)) {
+                return `${key} = ?, ${key}_updated_at = NOW()`;
+              }
+              return `${key} = ?`;
+            })
+            .join(", ");
+
+          // Update values excluding null values
+          const updateValues = Object.values(formData).filter(
+            (value) => value !== null
+          );
+
+          // Add the uid for the WHERE clause
+          updateValues.push(formData.uid);
+
+          const updateQuery = `
+          UPDATE vendors
+          SET ${updateFields}
+          WHERE uid = ?
+        `;
+
+          connection.query(
+            updateQuery,
+            updateValues,
+            (updateErr, updateResult) => {
+              if (updateErr) {
+                console.error(
+                  `Error in updating data in the table: ${updateErr}`
+                );
+                res.status(500).json({ message: "Internal Server Error" });
+              } else {
+                console.log(updateResult);
+                console.log("Document Updated Successfully");
+                res
+                  .status(200)
+                  .json({ message: "Document Updated Successfully" });
+              }
+            }
+          );
+        } else {
+          // Insert new records, excluding _updated_at fields for uid and dcd_id
+          const insertData = { ...formData };
+
+          // Add _updated_at timestamps for the specific document fields
+          const insertFields = [];
+          const insertPlaceholders = [];
+          const insertValues = [];
+
+          for (const [key, value] of Object.entries(insertData)) {
+            insertFields.push(key);
+            insertPlaceholders.push("?");
+            insertValues.push(value);
+
+            // If the key is in the documentFields list, add an _updated_at field
+            if (documentFields.includes(key)) {
+              insertFields.push(`${key}_updated_at`);
+              insertPlaceholders.push("NOW()");
+            }
+          }
+
+          const insertQuery = `
+            INSERT INTO vendors (${insertFields.join(", ")})
+            VALUES (${insertPlaceholders.join(", ")})
+          `;
+
+          connection.query(
+            insertQuery,
+            insertValues,
+            (insertErr, insertResult) => {
+              if (insertErr) {
+                console.error(
+                  `Error in inserting data to the table: ${insertErr}`
+                );
+                res.status(500).json({ message: "Internal Server Error" });
+              } else {
+                console.log(insertResult);
+                console.log("Documents Uploaded Successfully");
+                res
+                  .status(200)
+                  .json({ message: "Documents Uploaded Successfully" });
+              }
+            }
+          );
+        }
+      }
+    });
+  });
+});
 
 module.exports = {
   vendor_document_auth,
@@ -269,4 +430,7 @@ module.exports = {
   uploadProfileImage,
   sendProfileUpdateEmailVerification,
   updateProfile,
+  fetchParticularDocStatus,
+  fetchDocLinks,
+  documentUpload,
 };

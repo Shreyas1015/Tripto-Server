@@ -10,7 +10,11 @@ const {
   updateProfile,
   fetchProfileIMG,
   sendProfileUpdateEmailVerification,
+  fetchParticularDocStatus,
+  fetchDocLinks,
+  documentUpload,
 } = require("../controllers/vendorController");
+const { route } = require("./authRoute");
 
 const router = express.Router();
 
@@ -29,5 +33,12 @@ router.post(
   authenticateUser,
   fetchProfileIMG
 );
+router.post(
+  "/fetchParticularDocStatus",
+  authenticateToken,
+  fetchParticularDocStatus
+);
+router.post("/fetchDocLinks", authenticateToken, fetchDocLinks);
+router.post("/document_upload", authenticateToken, documentUpload);
 
 module.exports = router;
