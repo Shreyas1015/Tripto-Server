@@ -13,8 +13,14 @@ const {
   fetchParticularDocStatus,
   fetchDocLinks,
   documentUpload,
+  fetchVID,
+  handleOneWayTrip,
+  handleRoundTrip,
+  fetchVendorBookingsData,
+  fetchVendorBookingStatusData,
+  fetchVendorIncomeData,
+  fetchVendorDriverData,
 } = require("../controllers/vendorController");
-const { route } = require("./authRoute");
 
 const router = express.Router();
 
@@ -40,5 +46,20 @@ router.post(
 );
 router.post("/fetchDocLinks", authenticateToken, fetchDocLinks);
 router.post("/document_upload", authenticateToken, documentUpload);
+router.post("/fetchVID", authenticateToken, fetchVID);
+router.post("/handleOneWayTrip", authenticateToken, handleOneWayTrip);
+router.post("/handleRoundTrip", authenticateToken, handleRoundTrip);
+router.post(
+  "/fetchVendorBookingsData",
+  authenticateToken,
+  fetchVendorBookingsData
+);
+router.post("/fetchVendorIncomeData", authenticateToken, fetchVendorIncomeData);
+router.post(
+  "/fetchVendorBookingStatusData",
+  authenticateToken,
+  fetchVendorBookingStatusData
+);
+router.post("/fetchVendorDriverData", authenticateToken, fetchVendorDriverData);
 
 module.exports = router;

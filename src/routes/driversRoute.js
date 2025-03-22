@@ -19,6 +19,7 @@ const {
   fetchParticularBookingsDetails,
   driverAcceptBooking,
   fetchBookingsDataTable,
+  verifyOtp,
 } = require("../controllers/driversController");
 const router = express.Router();
 
@@ -61,5 +62,7 @@ router.post(
   authenticateToken,
   fetchBookingsDataTable
 );
+
+router.post("/verifyOtp", authenticateToken, verifyOtp);
 
 module.exports = router;

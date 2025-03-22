@@ -11,6 +11,14 @@ const {
   handleRoundTrip,
   fetchPID,
   fetchBookingsDataTable,
+  checkDriverAssignment,
+  cancelBooking,
+  getCurrentRide,
+  setRideOtp,
+  completeRide,
+  startRide,
+  verifyRideOtp,
+  rateDriver,
 } = require("../controllers/passengersController");
 
 const router = express.Router();
@@ -34,5 +42,13 @@ router.post(
   authenticateToken,
   fetchBookingsDataTable
 );
+router.post("/checkDriverAssignment", authenticateToken, checkDriverAssignment);
+router.post("/cancelBooking", authenticateToken, cancelBooking);
+router.post("/getCurrentRide", authenticateToken, getCurrentRide);
+router.post("/setRideOtp", authenticateToken, setRideOtp);
+router.post("/completeRide", authenticateToken, completeRide);
+router.post("/startRide", authenticateToken, startRide);
+router.post("/verifyRideOtp", authenticateToken, verifyRideOtp);
+router.post("/rateDriver", authenticateToken, rateDriver);
 
 module.exports = router;

@@ -72,7 +72,8 @@ const fetchProfileData = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID } = req.body;
 
-    const searchQuery = "Select * from users where uid = ?";
+    const searchQuery =
+      "Select u.*,v.firm_name from users as u join vendors as v on v.uid = u.uid where u.uid = ?";
     connection.query(searchQuery, decryptedUID, (err, result) => {
       if (err) {
         console.error(`Error executing query ${err}`);
@@ -94,7 +95,7 @@ const fetchProfileIMG = asyncHand(async (req, res) => {
   try {
     const { decryptedUID } = req.body;
 
-    const query = "SELECT profile_img FROM vendors WHERE uid = ?";
+    const query = "SELECT profilePhoto FROM vendors WHERE uid = ?";
     connection.query(query, [decryptedUID], (err, result) => {
       if (err) {
         console.error(`Failed to execute ${query}`, err);
@@ -105,7 +106,7 @@ const fetchProfileIMG = asyncHand(async (req, res) => {
         return res.status(404).json({ message: "Profile image not found" });
       }
 
-      console.log("Image link fetched", result[0].profile_img);
+      console.log("Image link fetched", result[0].profilePhoto);
       res.status(200).json({ link: result[0] });
     });
   } catch (error) {
@@ -213,58 +214,65 @@ const sendProfileUpdateEmailVerification = asyncHand(async (req, res) => {
 
 const updateProfile = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
-    const formData = req.body;
-    console.log("FormData.uid :", formData.uid);
+    const formData = req.body.profileData;
+    console.log("Profile Data to be updated: ", formData);
 
-    const updateQuery =
-      "UPDATE users SET name = ?, email = ?, phone_number = ? WHERE uid = ?";
-    const updateValues = [
+    // Update users table first
+    const updateUserQuery = `
+      UPDATE users 
+      SET name = ?, email = ?, phone_number = ? 
+      WHERE uid = ?;
+    `;
+    const updateUserValues = [
       formData.name,
       formData.email,
       formData.phone_number,
       formData.uid,
     ];
 
-    connection.query(updateQuery, updateValues, (err, result) => {
+    connection.query(updateUserQuery, updateUserValues, (err, userResult) => {
       if (err) {
-        console.error(`Error updating profile: ${err}`);
+        console.error(`Error updating user profile: ${err}`);
         return res.status(500).json({ error: "Server Error" });
       }
 
-      if (formData.user_type == 2) {
-        const updateVendorQuery =
-          "UPDATE vendors SET name = ?, email = ?, phone_number = ? WHERE uid = ?";
-        const updateVendorValues = [
-          formData.name,
-          formData.email,
-          formData.phone_number,
-          formData.uid,
-        ];
+      // Update vendors table after updating users
+      const updateVendorQuery = `
+        UPDATE vendors 
+        SET name = ?, email = ?, phone_number = ?, firm_name = ?
+        WHERE uid = ?;
+      `;
+      const updateVendorValues = [
+        formData.name,
+        formData.email,
+        formData.phone_number,
+        formData.firm_name,
+        formData.uid,
+      ];
 
-        connection.query(updateVendorQuery, updateVendorValues, (err) => {
+      connection.query(
+        updateVendorQuery,
+        updateVendorValues,
+        (err, vendorResult) => {
           if (err) {
             console.error(`Error updating vendor profile: ${err}`);
             return res.status(500).json({ error: "Server Error" });
           }
 
-          console.log("Profile updated: ", result);
+          console.log("Profile updated successfully.");
           return res
             .status(200)
             .json({ message: "Profile Updated Successfully" });
-        });
-      } else {
-        console.log("Profile updated: ", result);
-        return res
-          .status(200)
-          .json({ message: "Profile Updated Successfully" });
-      }
+        }
+      );
     });
   });
 });
+
 const fetchParticularDocStatus = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID } = req.body;
-
+    console.log("Start with the query");
     const query = `
       SELECT aadharFrontStatus, aadharBackStatus, panCardFrontStatus, udyamAadharStatus, ghumastaLicenseStatus, profilePhotoStatus, all_documents_status, 
              aadharFrontRejectReason, aadharBackRejectReason, panCardFrontRejectReason, profilePhotoRejectReason, udyamAadharRejectReason, ghumastaLicenseRejectReason, 
@@ -423,6 +431,175 @@ const documentUpload = asyncHand(async (req, res) => {
   });
 });
 
+const fetchVID = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+
+    const query = "Select vid from vendors where uid = ?";
+    connection.query(query, decryptedUID, (err, result) => {
+      if (err) {
+        console.error("Internal Server Error", err);
+
+        res.status(500).json({ error: "Internal Server Error" });
+      } else {
+        console.log("VID : ", result[0].vid);
+        res.status(200).json(result[0].vid);
+      }
+    });
+  });
+});
+
+const handleOneWayTrip = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { formData, decryptedUID } = req.body;
+
+    const values = [
+      decryptedUID,
+      formData.vid,
+      formData.pickup_location,
+      formData.drop_location,
+      formData.pickup_date_time,
+      formData.distance,
+      formData.selected_car,
+      formData.price,
+      formData.passenger_name,
+      formData.passenger_phone,
+    ];
+    const query =
+      "INSERT INTO bookings (uid,vid,pickup_location,drop_location,pickup_date_time,trip_type,distance,selected_car,price,passenger_name,passenger_phone) VALUES (?,?,?,?,?,1,?,?,?,?,?) ";
+    connection.query(query, values, (err, result) => {
+      if (err) {
+        console.error(
+          `Error executing MySQL Query for adding one way trip: ${err}`
+        );
+
+        return res.status(500).json({ error: "Server Error" });
+      } else {
+        console.log("Trip booked Successfully");
+        res.status(200).json({ message: "Trip Booked Successfully" });
+      }
+    });
+  });
+});
+
+const handleRoundTrip = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { formData, decryptedUID } = req.body;
+
+    const values = [
+      decryptedUID,
+      formData.vid,
+      formData.pickup_location,
+      formData.drop_location,
+      formData.pickup_date_time,
+      formData.return_date_time,
+      formData.distance,
+      formData.selected_car,
+      formData.price,
+      formData.no_of_days,
+      formData.passenger_name,
+      formData.passenger_phone,
+    ];
+
+    const query =
+      "INSERT INTO bookings (uid,vid,pickup_location,drop_location,pickup_date_time,drop_date_time,trip_type,distance,selected_car,price,no_of_days,passenger_name,passenger_phone) VALUES (?,?,?,?,?,?,2,?,?,?,?,?,?)";
+    connection.query(query, values, (err, result) => {
+      if (err) {
+        console.error(
+          `Error executing MySQL Query for adding one way trip: ${err}`
+        );
+        return res.status(500).json({ error: "Server Error" });
+      } else {
+        console.log("Trip booked Successfully");
+        res.status(200).json({ message: "Trip Booked Successfully" });
+      }
+    });
+  });
+});
+
+const fetchVendorBookingsData = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+
+    if (!decryptedUID) {
+      return res.status(400).json({ error: "Vendor ID is required" });
+    }
+
+    const query = `SELECT * FROM bookings WHERE uid = ?`;
+
+    connection.query(query, [decryptedUID], (err, results) => {
+      if (err) {
+        console.error("Error fetching vendor bookings:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      res.status(200).json(results);
+    });
+  });
+});
+
+const fetchVendorIncomeData = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+
+    if (!decryptedUID) {
+      return res.status(400).json({ error: "Vendor ID is required" });
+    }
+
+    const query = `SELECT 'weekly' AS period, DATE_FORMAT(created_at, '%Y-%u') AS week, SUM(amount) AS total_income FROM transactions GROUP BY week UNION ALL SELECT 'monthly' AS period, DATE_FORMAT(created_at, '%Y-%m') AS month, SUM(amount) AS total_income FROM transactions GROUP BY month UNION ALL SELECT 'yearly' AS period, DATE_FORMAT(created_at, '%Y') AS year, SUM(amount) AS total_income FROM transactions GROUP BY year`;
+
+    connection.query(query, [decryptedUID], (err, results) => {
+      if (err) {
+        console.error("Error fetching vendor bookings:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      res.status(200).json(results);
+    });
+  });
+});
+
+const fetchVendorBookingStatusData = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+
+    if (!decryptedUID) {
+      return res.status(400).json({ error: "Vendor ID is required" });
+    }
+
+    const query = `SELECT SUM(CASE WHEN trip_status = 2 THEN 1 ELSE 0 END) AS completed_bookings, SUM(CASE WHEN trip_status = 0 THEN 1 ELSE 0 END) AS pending_bookings, SUM(CASE WHEN trip_status = 3 THEN 1 ELSE 0 END) AS cancelled_by_passenger, SUM(CASE WHEN trip_status = 4 THEN 1 ELSE 0 END) AS cancelled_by_driver FROM bookings WHERE uid = ? `;
+
+    connection.query(query, [decryptedUID], (err, results) => {
+      if (err) {
+        console.error("Error fetching vendor bookings:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      res.status(200).json(results);
+    });
+  });
+});
+const fetchVendorDriverData = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+
+    if (!decryptedUID) {
+      return res.status(400).json({ error: "Vendor ID is required" });
+    }
+
+    const query = `SELECT b.bid, b.did, u.name AS driver_name, u.phone_number AS driver_phone, dcd.car_name, dcd.car_number, dcd.car_type FROM bookings b JOIN drivers d ON b.did = d.did JOIN users u ON d.uid = u.uid JOIN drivers_car_details dcd ON d.uid = dcd.uid WHERE b.uid = ? AND b.trip_status IN (1, 2, 5) `;
+
+    connection.query(query, [decryptedUID], (err, results) => {
+      if (err) {
+        console.error("Error fetching vendor bookings:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      res.status(200).json(results);
+    });
+  });
+});
+
 module.exports = {
   vendor_document_auth,
   fetchProfileData,
@@ -432,5 +609,12 @@ module.exports = {
   updateProfile,
   fetchParticularDocStatus,
   fetchDocLinks,
+  fetchVID,
   documentUpload,
+  handleRoundTrip,
+  handleOneWayTrip,
+  fetchVendorBookingsData,
+  fetchVendorIncomeData,
+  fetchVendorBookingStatusData,
+  fetchVendorDriverData,
 };
