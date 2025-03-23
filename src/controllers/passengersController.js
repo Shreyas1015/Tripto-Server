@@ -186,7 +186,6 @@ const sendProfileUpdateEmailVerification = asyncHand(async (req, res) => {
 
 const fetchProfileIMG = asyncHand(async (req, res) => {
   try {
-    await authenticateUser(req, res);
     const { decryptedUID } = req.body;
 
     const query = "SELECT profile_img FROM passengers WHERE uid = ?";
@@ -383,7 +382,16 @@ const checkDriverAssignment = asyncHand((req, res) => {
         users.phone_number AS driver_phone, 
         drivers_car_details.car_number AS car_license_plate, 
         drivers_car_details.car_name AS car_model, 
-        bookings.trip_status AS booking_status 
+        bookings.trip_status AS booking_status,
+        bookings.pickup_location,
+        bookings.drop_location,
+        bookings.pickup_date_time,
+        bookings.drop_date_time,
+        bookings.distance,
+        bookings.price,
+        drivers.did,
+        drivers.profile_img,
+        bookings.bid
       FROM bookings
       JOIN drivers ON bookings.did = drivers.did
       JOIN users ON drivers.uid = users.uid
@@ -405,11 +413,20 @@ const checkDriverAssignment = asyncHand((req, res) => {
       }
 
       const rideDetails = {
+        bookingId: result[0].bid,
+        driverId: result[0].did,
+        driverProfileImg: result[0].profile_img,
         driverName: result[0].driver_name,
         driverPhone: result[0].driver_phone,
         carLicensePlate: result[0].car_license_plate,
         carModel: result[0].car_model,
         bookingStatus: result[0].booking_status,
+        pickupLocation: result[0].pickup_location,
+        dropLocation: result[0].drop_location,
+        pickupDateTime: result[0].pickup_date_time,
+        dropDateTime: result[0].drop_date_time,
+        distance: result[0].distance,
+        price: result[0].price,
       };
 
       console.log("Driver assigned:", rideDetails);
@@ -447,18 +464,18 @@ const cancelBooking = asyncHand((req, res) => {
         const booking = results[0];
 
         // Check if the booking is already completed or canceled
-        if (booking.trip_status === 2) {
+        if (booking.trip_status === 5) {
           return res
             .status(400)
             .json({ error: "Booking is already completed" });
         }
-        if (booking.trip_status === 3 || booking.trip_status === 4) {
+        if (booking.trip_status === 6 || booking.trip_status === 7) {
           return res.status(400).json({ error: "Booking is already canceled" });
         }
 
         // Update the booking status to 'Cancelled By Passenger' (status = 3)
         const cancelBookingQuery = `
-        UPDATE bookings SET trip_status = 3 WHERE bid = ? AND uid = ?
+        UPDATE bookings SET trip_status = 6 WHERE bid = ? AND uid = ?
       `;
 
         connection.query(
@@ -513,7 +530,7 @@ const getCurrentRide = asyncHand((req, res) => {
   });
 });
 
-const setRideOtp = asyncHand((req, res) => {
+const setRideStartOtp = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID, rideId, otp } = req.body;
     console.log("Ride OTP: ", otp);
@@ -538,118 +555,6 @@ const setRideOtp = asyncHand((req, res) => {
   });
 });
 
-const verifyRideOtp = asyncHand((req, res) => {
-  authenticateUser(req, res, () => {
-    const { decryptedUID, rideId, enteredOtp } = req.body;
-
-    if (!decryptedUID || !rideId || !enteredOtp) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    const selectQuery = `
-    SELECT ride_otp FROM bookings 
-    WHERE bid = ? AND uid = ?
-  `;
-
-    connection.query(selectQuery, [rideId, decryptedUID], (err, results) => {
-      if (err) {
-        console.error("Error fetching ride OTP:", err);
-        return res.status(500).json({ message: "Internal server error" });
-      }
-
-      if (results.length === 0) {
-        return res.status(404).json({ message: "Ride not found" });
-      }
-
-      const dbOtp = results[0].ride_otp;
-
-      if (Number(dbOtp) === Number(enteredOtp)) {
-        // OTP matches, update ride status
-        const updateQuery = `
-        UPDATE bookings 
-        SET trip_status = 2 
-        WHERE bid = ? AND uid = ?
-      `;
-
-        connection.query(updateQuery, [rideId, decryptedUID], (updateErr) => {
-          if (updateErr) {
-            console.error("Error updating trip status:", updateErr);
-            return res.status(500).json({ message: "Internal server error" });
-          }
-
-          return res
-            .status(200)
-            .json({ message: "OTP verified. Ride started." });
-        });
-      } else {
-        return res.status(401).json({ message: "Invalid OTP" });
-      }
-    });
-  });
-});
-
-const startRide = asyncHand((req, res) => {
-  authenticateUser(req, res, () => {
-    const { decryptedUID, rideId } = req.body;
-
-    if (!decryptedUID || !rideId) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    // Check if ride exists
-    const selectQuery = `
-    SELECT bid, trip_status 
-    FROM bookings 
-    WHERE bid = ? AND uid = ?
-  `;
-
-    connection.query(selectQuery, [rideId, decryptedUID], (err, results) => {
-      if (err) {
-        console.error("Error checking ride:", err);
-        return res.status(500).json({ message: "Internal server error" });
-      }
-
-      if (results.length === 0) {
-        return res.status(404).json({ message: "Ride not found" });
-      }
-
-      const currentStatus = results[0].trip_status;
-
-      // Prevent starting if already started/completed/cancelled
-      if (currentStatus === 2) {
-        return res.status(400).json({ message: "Ride already completed" });
-      }
-      if (currentStatus === 3) {
-        return res.status(400).json({ message: "Ride cancelled by passenger" });
-      }
-      if (currentStatus === 4) {
-        return res.status(400).json({ message: "Ride cancelled by driver" });
-      }
-      if (currentStatus === 5) {
-        return res.status(400).json({ message: "Ride already started" });
-      }
-
-      // Update ride to Started (status = 5)
-      const updateQuery = `
-      UPDATE bookings 
-      SET trip_status = 5 
-      WHERE bid = ? AND uid = ?
-    `;
-
-      connection.query(updateQuery, [rideId, decryptedUID], (updateErr) => {
-        if (updateErr) {
-          console.error("Error updating ride status:", updateErr);
-          return res.status(500).json({ message: "Error starting ride" });
-        }
-
-        return res
-          .status(200)
-          .json({ message: "Ride started successfully", status: 5 });
-      });
-    });
-  });
-});
-
 const completeRide = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID, rideId } = req.body;
@@ -662,10 +567,10 @@ const completeRide = asyncHand((req, res) => {
     const selectQuery = `
       SELECT bid, trip_status 
       FROM bookings 
-      WHERE bid = ? AND uid = ?
+      WHERE bid = ? 
     `;
 
-    connection.query(selectQuery, [rideId, decryptedUID], (err, results) => {
+    connection.query(selectQuery, [rideId], (err, results) => {
       if (err) {
         console.error("Error checking ride:", err);
         return res.status(500).json({ message: "Internal server error" });
@@ -678,16 +583,16 @@ const completeRide = asyncHand((req, res) => {
       const currentStatus = results[0].trip_status;
 
       // Only allow completion if ride has started
-      if (currentStatus !== 5) {
+      if (currentStatus !== 4) {
         return res
           .status(400)
           .json({ message: "Ride not in progress. Cannot complete." });
       }
 
-      // Update ride to Completed (status = 2)
+      // Update ride to Completed (status = 5)
       const updateQuery = `
         UPDATE bookings 
-        SET trip_status = 2, drop_date_time = NOW() 
+        SET trip_status = 5, drop_date_time = NOW() 
         WHERE bid = ? AND uid = ?
       `;
 
@@ -697,9 +602,7 @@ const completeRide = asyncHand((req, res) => {
           return res.status(500).json({ message: "Error completing ride" });
         }
 
-        return res
-          .status(200)
-          .json({ message: "Ride completed successfully", status: 2 });
+        return res.status(200).json({ message: "Ride completed successfully" });
       });
     });
   });
@@ -737,6 +640,244 @@ const rateDriver = asyncHand((req, res) => {
   });
 });
 
+const getTripStatus = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, bookingId } = req.body;
+
+    if (!decryptedUID || !bookingId) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const query = `
+      SELECT trip_status FROM bookings WHERE bid = ?
+    `;
+
+    connection.query(query, [bookingId], (err, results) => {
+      if (err) {
+        console.error("Error fetching trip status:", err);
+        return res.status(500).json({ message: "Internal server error" });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      const tripStatus = results[0].trip_status;
+
+      return res.status(200).json(tripStatus);
+    });
+  });
+});
+
+const verifyPaymentOtp = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, rideId, enteredOtp, paymentMethod } = req.body;
+
+    console.log(
+      "Ride ID:",
+      rideId,
+      "Entered OTP:",
+      enteredOtp,
+      "Payment Method:",
+      paymentMethod
+    );
+
+    // Step 1: Fetch ride details
+    const query = `SELECT payment_otp, trip_status, price, pid, did, vid FROM bookings WHERE bid = ?`;
+
+    connection.query(query, [rideId], (err, results) => {
+      if (err) {
+        console.error("Error fetching ride details:", err);
+        return res.status(500).json({ message: "Internal server error" });
+      }
+
+      if (results.length === 0) {
+        console.log("No ride found for ID:", rideId);
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const { payment_otp, trip_status, price, pid, did, vid } = results[0];
+      console.log("Fetched ride details:", results[0]);
+
+      // Step 2: Verify OTP
+      if (payment_otp !== enteredOtp) {
+        console.log("Entered OTP does not match stored OTP.");
+        return res.status(400).json({ message: "Invalid OTP" });
+      }
+
+      // Step 3: Ensure ride is in progress
+      if (trip_status !== 4) {
+        console.log(
+          "Ride is not in progress. Current trip_status:",
+          trip_status
+        );
+        return res
+          .status(400)
+          .json({ message: "Ride not in progress. Cannot complete." });
+      }
+
+      // Step 4: Update trip_status to Completed
+      const updateQuery = `UPDATE bookings SET trip_status = 5, drop_date_time = NOW() WHERE bid = ?`;
+
+      connection.query(updateQuery, [rideId], (updateErr) => {
+        if (updateErr) {
+          console.error("Error updating ride status:", updateErr);
+          return res.status(500).json({ message: "Error completing ride" });
+        }
+
+        console.log("Ride status updated to Completed for Ride ID:", rideId);
+
+        // Step 5: Insert transaction record
+        const insertTransactionQuery = `
+          INSERT INTO transactions (pid, did, vid, bid, amount, status, payment_mode)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        connection.query(
+          insertTransactionQuery,
+          [pid, did, vid, rideId, price, 1, paymentMethod],
+          (txnErr) => {
+            if (txnErr) {
+              console.error("Error inserting transaction:", txnErr);
+              return res.status(500).json({ message: "Transaction failed" });
+            }
+
+            console.log(
+              "Transaction inserted successfully for Ride ID:",
+              rideId
+            );
+
+            // Step 6: Calculate Wallet Distribution
+            let driverShare = 0,
+              adminShare = 0,
+              vendorShare = 0;
+
+            if (vid) {
+              driverShare = price * 0.9;
+              adminShare = price * 0.06;
+              vendorShare = price * 0.04;
+            } else {
+              driverShare = price * 0.9;
+              adminShare = price * 0.1;
+            }
+
+            console.log(
+              "Wallet Distribution - Driver:",
+              driverShare,
+              "Admin:",
+              adminShare,
+              "Vendor:",
+              vendorShare
+            );
+
+            // Step 7: Ensure Wallet Entries Exist Before Updating
+
+            const ensureWalletExists = (userId, column, callback) => {
+              const checkQuery = `SELECT balance FROM wallets WHERE ${column} = ?`;
+
+              connection.query(checkQuery, [userId], (err, results) => {
+                if (err) {
+                  console.error(`Error checking wallet for ${column}:`, err);
+                  return callback(err);
+                }
+
+                if (results.length === 0) {
+                  const insertQuery = `INSERT INTO wallets (${column}, balance) VALUES (?, 0)`;
+
+                  connection.query(insertQuery, [userId], (insertErr) => {
+                    if (insertErr) {
+                      console.error(
+                        `Error inserting wallet for ${column}:`,
+                        insertErr
+                      );
+                      return callback(insertErr);
+                    }
+                    console.log(
+                      `Wallet entry created for ${column}: ${userId}`
+                    );
+                    callback(null);
+                  });
+                } else {
+                  callback(null);
+                }
+              });
+            };
+
+            // Ensure driver wallet exists
+            ensureWalletExists(did, "did", (err) => {
+              if (!err) {
+                const updateDriverWallet = `UPDATE wallets SET balance = balance + ? WHERE did = ?`;
+                connection.query(
+                  updateDriverWallet,
+                  [driverShare, did],
+                  (dWalletErr) => {
+                    if (dWalletErr)
+                      console.error(
+                        "Error updating driver wallet:",
+                        dWalletErr
+                      );
+                    else
+                      console.log(
+                        "Driver wallet updated successfully for DID:",
+                        did
+                      );
+                  }
+                );
+              }
+            });
+
+            // Ensure admin wallet exists
+            ensureWalletExists(1, "aid", (err) => {
+              if (!err) {
+                const updateAdminWallet = `UPDATE wallets SET balance = balance + ? WHERE aid IS NOT NULL LIMIT 1`;
+                connection.query(
+                  updateAdminWallet,
+                  [adminShare],
+                  (aWalletErr) => {
+                    if (aWalletErr)
+                      console.error("Error updating admin wallet:", aWalletErr);
+                    else console.log("Admin wallet updated successfully");
+                  }
+                );
+              }
+            });
+
+            // Ensure vendor wallet exists (if applicable)
+            if (vid) {
+              ensureWalletExists(vid, "vid", (err) => {
+                if (!err) {
+                  const updateVendorWallet = `UPDATE wallets SET balance = balance + ? WHERE vid = ?`;
+                  connection.query(
+                    updateVendorWallet,
+                    [vendorShare, vid],
+                    (vWalletErr) => {
+                      if (vWalletErr)
+                        console.error(
+                          "Error updating vendor wallet:",
+                          vWalletErr
+                        );
+                      else
+                        console.log(
+                          "Vendor wallet updated successfully for VID:",
+                          vid
+                        );
+                    }
+                  );
+                }
+              });
+            }
+
+            return res.status(200).json({
+              message:
+                "OTP verified, ride completed, transaction recorded, and wallets updated.",
+            });
+          }
+        );
+      });
+    });
+  });
+});
+
 module.exports = {
   passenger_document_auth,
   fetchProfileData,
@@ -751,9 +892,9 @@ module.exports = {
   checkDriverAssignment,
   cancelBooking,
   getCurrentRide,
-  setRideOtp,
+  setRideStartOtp,
   completeRide,
-  startRide,
-  verifyRideOtp,
   rateDriver,
+  getTripStatus,
+  verifyPaymentOtp,
 };

@@ -19,7 +19,11 @@ const {
   fetchParticularBookingsDetails,
   driverAcceptBooking,
   fetchBookingsDataTable,
-  verifyOtp,
+  verifyRideStartOtp,
+  getTripStatus,
+  startRide,
+  setPaymentOtp,
+  arrivedAtPickup,
 } = require("../controllers/driversController");
 const router = express.Router();
 
@@ -63,6 +67,10 @@ router.post(
   fetchBookingsDataTable
 );
 
-router.post("/verifyOtp", authenticateToken, verifyOtp);
+router.post("/verifyRideStartOtp", authenticateToken, verifyRideStartOtp);
+router.post("/getTripStatus", authenticateToken, getTripStatus);
+router.post("/startRide", authenticateToken, startRide);
+router.post("/setPaymentOtp", authenticateToken, setPaymentOtp);
+router.post("/arrivedAtPickup", authenticateToken, arrivedAtPickup);
 
 module.exports = router;

@@ -14,11 +14,11 @@ const {
   checkDriverAssignment,
   cancelBooking,
   getCurrentRide,
-  setRideOtp,
   completeRide,
-  startRide,
-  verifyRideOtp,
   rateDriver,
+  getTripStatus,
+  setRideStartOtp,
+  verifyPaymentOtp,
 } = require("../controllers/passengersController");
 
 const router = express.Router();
@@ -33,7 +33,12 @@ router.post(
 );
 
 router.post("/uploadProfileImage", authenticateToken, uploadProfileImage);
-router.post("/fetchProfileIMG", authenticateToken, fetchProfileIMG);
+router.post(
+  "/fetchProfileIMG",
+  authenticateToken,
+  authenticateToken,
+  fetchProfileIMG
+);
 router.post("/handleOneWayTrip", authenticateToken, handleOneWayTrip);
 router.post("/handleRoundTrip", authenticateToken, handleRoundTrip);
 router.post("/fetchPID", authenticateToken, fetchPID);
@@ -45,10 +50,10 @@ router.post(
 router.post("/checkDriverAssignment", authenticateToken, checkDriverAssignment);
 router.post("/cancelBooking", authenticateToken, cancelBooking);
 router.post("/getCurrentRide", authenticateToken, getCurrentRide);
-router.post("/setRideOtp", authenticateToken, setRideOtp);
+router.post("/setRideStartOtp", authenticateToken, setRideStartOtp);
 router.post("/completeRide", authenticateToken, completeRide);
-router.post("/startRide", authenticateToken, startRide);
-router.post("/verifyRideOtp", authenticateToken, verifyRideOtp);
 router.post("/rateDriver", authenticateToken, rateDriver);
+router.post("/getTripStatus", authenticateToken, getTripStatus);
+router.post("/verifyPaymentOtp", authenticateToken, verifyPaymentOtp);
 
 module.exports = router;

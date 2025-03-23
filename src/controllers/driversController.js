@@ -574,52 +574,64 @@ const fetchDcdID = asyncHand((req, res) => {
   });
 });
 
-const fetchBookingsDetails = asyncHand((req, res) => {
-  authenticateUser(req, res, () => {
+const fetchBookingsDetails = asyncHand(async (req, res) => {
+  authenticateUser(req, res, async () => {
     const { decryptedUID } = req.body;
 
-    // Step 1: Get the driver's car type from drivers_car_details
-    const getCarTypeQuery = `
-      SELECT car_type FROM drivers_car_details WHERE uid = ?
-    `;
+    console.log("Received request body:", req.body); // Debugging
+    if (!decryptedUID) {
+      return res.status(400).json({ error: "Missing decryptedUID" });
+    }
 
-    connection.query(getCarTypeQuery, [decryptedUID], (err, carResult) => {
-      if (err) {
-        console.error("Error fetching car type:", err);
-        return res.status(500).json({ error: "Internal Server Error" });
-      }
+    if (!connection) {
+      return res.status(500).json({ error: "Database connection unavailable" });
+    }
 
-      if (carResult.length === 0) {
-        return res
-          .status(404)
-          .json({ message: "No car details found for the driver" });
-      }
-
-      const driverCarType = carResult[0].car_type;
-
-      // Step 2: Fetch bookings that match the driver's car type
-      const getBookingsQuery = `
-        SELECT * FROM bookings 
-        WHERE trip_status = 0 
-        AND trip_status NOT IN (2) -- Exclude canceled trips
-        AND pickup_date_time >= NOW() -- Show only future trips
-        AND selected_car = ? -- Match driver's car type
-        ORDER BY pickup_date_time ASC
-      `;
-
-      connection.query(getBookingsQuery, [driverCarType], (err, bookings) => {
+    try {
+      // Step 1: Get the driver's car type
+      const getCarTypeQuery = `SELECT car_type FROM drivers_car_details WHERE uid = ?`;
+      connection.query(getCarTypeQuery, [decryptedUID], (err, carResult) => {
         if (err) {
-          console.error("Error fetching bookings:", err);
+          console.error("Error fetching car type:", err);
           return res.status(500).json({ error: "Internal Server Error" });
         }
 
-        if (bookings.length === 0) {
-          return res.status(404).json({ message: "No Bookings Found" });
+        if (carResult.length === 0) {
+          return res
+            .status(404)
+            .json({ message: "No car details found for the driver" });
         }
 
-        res.status(200).json(bookings);
+        const driverCarType = carResult[0].car_type;
+        console.log("Driver car type:", driverCarType); // Debugging
+
+        // Step 2: Fetch bookings that match the driver's car type
+        const getBookingsQuery = `
+          SELECT * FROM bookings 
+          WHERE trip_status = 0 
+          AND pickup_date_time >= NOW()
+          AND selected_car = ?
+          ORDER BY pickup_date_time ASC
+        `;
+
+        connection.query(getBookingsQuery, [driverCarType], (err, bookings) => {
+          if (err) {
+            console.error("Error fetching bookings:", err);
+            return res.status(500).json({ error: "Internal Server Error" });
+          }
+
+          // if (bookings.length === 0) {
+          //   return res.status(404).json({ message: "No Bookings Found" });
+          // }
+
+          console.log("Bookings fetched successfully:", bookings.length); // Debugging
+          res.status(200).json(bookings);
+        });
       });
-    });
+    } catch (error) {
+      console.error("Unexpected error:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
   });
 });
 
@@ -746,41 +758,204 @@ const driverAcceptBooking = asyncHand((req, res) => {
   });
 });
 
-const verifyOtp = asyncHand((req, res) => {
+const verifyRideStartOtp = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
-    const { decryptedUID, rideId, otp } = req.body;
+    const { decryptedUID, rideId, enteredOtp } = req.body;
+    console.log("Ride ID:", rideId);
+    console.log("Entered OTP:", enteredOtp);
 
-    // Check if required fields are present
-    if (!decryptedUID || !rideId || !otp) {
+    if (!decryptedUID || !rideId || !enteredOtp) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Query to fetch stored OTP
-    const query = `
-      SELECT ride_otp 
-      FROM bookings 
-      WHERE bid = ? AND uid = ?
-    `;
+    const selectQuery = `
+    SELECT ride_otp FROM bookings 
+    WHERE bid = ?
+  `;
 
-    connection.query(query, [rideId, decryptedUID], (err, results) => {
+    connection.query(selectQuery, [rideId], (err, results) => {
       if (err) {
-        console.error("Error fetching OTP:", err);
+        console.error("Error fetching ride OTP:", err);
         return res.status(500).json({ message: "Internal server error" });
       }
 
-      // Booking not found
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const dbOtp = results[0].ride_otp;
+      console.log("DB OTP:", dbOtp);
+
+      if (Number(dbOtp) === Number(enteredOtp)) {
+        // OTP matches, update ride status
+        const updateQuery = `
+        UPDATE bookings 
+        SET trip_status = 2 
+        WHERE bid = ? AND uid = ?
+      `;
+
+        connection.query(updateQuery, [rideId, decryptedUID], (updateErr) => {
+          if (updateErr) {
+            console.error("Error updating trip status:", updateErr);
+            return res.status(500).json({ message: "Internal server error" });
+          }
+
+          console.log("Ride started successfully");
+
+          return res
+            .status(200)
+            .json({ message: "OTP verified. Ride started." });
+        });
+      } else {
+        return res.status(401).json({ message: "Invalid OTP" });
+      }
+    });
+  });
+});
+
+const getTripStatus = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, bookingId } = req.body;
+    console.log("Booking ID:", bookingId);
+
+    if (!decryptedUID || !bookingId) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const query = `
+      SELECT trip_status FROM bookings WHERE bid = ?
+    `;
+
+    connection.query(query, [bookingId], (err, results) => {
+      if (err) {
+        console.error("Error fetching trip status:", err);
+        return res.status(500).json({ message: "Internal server error" });
+      }
+
       if (results.length === 0) {
         return res.status(404).json({ message: "Booking not found" });
       }
 
-      const storedOtp = results[0].ride_otp;
+      const tripStatus = results[0].trip_status;
+      return res.status(200).json(tripStatus);
+    });
+  });
+});
 
-      // Compare OTP
-      if (storedOtp === otp) {
-        return res.status(200).json({ message: "OTP verified successfully" });
-      } else {
-        return res.status(400).json({ message: "Invalid OTP" });
+const startRide = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, rideId } = req.body;
+
+    if (!decryptedUID || !rideId) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Check if ride exists
+    const selectQuery = `
+      SELECT bid, trip_status 
+      FROM bookings 
+      WHERE bid = ? 
+    `;
+
+    connection.query(selectQuery, [rideId], (err, results) => {
+      if (err) {
+        console.error("Error checking ride:", err);
+        return res.status(500).json({ message: "Internal server error" });
       }
+
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const currentStatus = results[0].trip_status;
+
+      // Prevent starting if already started/completed/cancelled
+      if ([3, 5, 6, 7].includes(currentStatus)) {
+        const statusMessages = {
+          3: "Ride already started",
+          5: "Ride already completed",
+          6: "Ride cancelled by passenger",
+          7: "Ride cancelled by driver",
+        };
+        return res.status(400).json({ message: statusMessages[currentStatus] });
+      }
+
+      // Update ride to Started (status = 3)
+      const updateToStartedQuery = `UPDATE bookings SET trip_status = 3 WHERE bid = ?`;
+
+      connection.query(updateToStartedQuery, [rideId], (updateErr) => {
+        if (updateErr) {
+          console.error("Error updating ride status to 3:", updateErr);
+          return res.status(500).json({ message: "Error starting ride" });
+        }
+        console.log("Ride started successfully");
+
+        // Update ride to In Progress (status = 4) after success
+        const updateToInProgressQuery = `UPDATE bookings SET trip_status = 4 WHERE bid = ?`;
+
+        connection.query(updateToInProgressQuery, [rideId], (updateErr2) => {
+          if (updateErr2) {
+            console.error("Error updating ride status to 4:", updateErr2);
+            return res
+              .status(500)
+              .json({ message: "Error updating ride progress" });
+          }
+          console.log("Ride status updated to 4 (In Progress)");
+
+          return res
+            .status(200)
+            .json({
+              message: "Ride started and updated successfully to In Progress",
+            });
+        });
+      });
+    });
+  });
+});
+
+const setPaymentOtp = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, rideId, otp } = req.body;
+    const query = `
+      UPDATE bookings
+      SET payment_otp = ?
+      WHERE bid = ? 
+      `;
+
+    connection.query(query, [otp, rideId], (err, result) => {
+      if (err) {
+        console.error("Error setting payment OTP:", err);
+        return res.status(500).json({ message: "Error setting payment OTP" });
+      }
+      if (result.affectedRows === 0) {
+        return res.status(400).json({ message: "Invalid ride ID or user ID" });
+      }
+      return res.status(200).json({ message: "Payment OTP set successfully" });
+    });
+  });
+});
+
+const arrivedAtPickup = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, rideId } = req.body;
+    console.log("Arrived at pickup location:", rideId);
+    const query = `
+      UPDATE bookings
+      SET trip_status = 2
+      WHERE bid = ?
+    `;
+
+    connection.query(query, [rideId], (err, result) => {
+      if (err) {
+        console.error("Error updating trip status:", err);
+        return res.status(500).json({ message: "Internal server error" });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(400).json({ message: "Invalid ride ID or user ID" });
+      }
+
+      return res.status(200).json({ message: "Arrived at pickup location" });
     });
   });
 });
@@ -804,5 +979,9 @@ module.exports = {
   fetchParticularBookingsDetails,
   driverAcceptBooking,
   fetchBookingsDataTable,
-  verifyOtp,
+  verifyRideStartOtp,
+  getTripStatus,
+  startRide,
+  setPaymentOtp,
+  arrivedAtPickup,
 };
