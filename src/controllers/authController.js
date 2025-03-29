@@ -34,16 +34,30 @@ async function sendOTPEmail(email, otp) {
   const mailOptions = {
     from: process.env.TRANSPORTER_EMAIL,
     to: email,
-    subject: "Email Verification OTP",
-    text: `Your OTP for email verification is: ${otp}`,
+    subject: "Email Verification - TRIPTO TOURS",
+    text: `Dear Valued Customer,
+
+Thank you for choosing TRIPTO TOURS. To ensure the security of your account and complete the email verification process, please use the One-Time Password (OTP) provided below:
+
+🔐 OTP: ${otp}
+
+This OTP is valid for the next 10 minutes. Please do not share this code with anyone, including TRIPTO TOURS representatives. 
+
+If you did not initiate this request or believe this message was sent to you in error, please disregard this email. No further action is required on your part. 
+
+For assistance or inquiries, feel free to contact our support team at support@triptotours.com. 
+
+We look forward to helping you explore new destinations and making your travel experiences seamless and memorable.
+
+Best regards,  
+The TRIPTO TOURS Team  
+https://www.tripto-web.vercel.app  
+Contact: +1-XXX-XXX-XXXX`,
   };
 
   await transporter.sendMail(mailOptions);
   console.log(
-    "Email verification OTP sent to mail:",
-    email,
-    "and the OTP is:",
-    otp
+    `Verification OTP has been successfully sent to: ${email}. OTP: ${otp}`
   );
 }
 
