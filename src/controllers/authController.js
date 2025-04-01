@@ -100,13 +100,13 @@ const login = asyncHand((req, res) => {
 
         res.cookie("token", token, {
           httpOnly: true,
-          secure: true,
-          sameSite: "None",
+          // secure: true,
+          // sameSite: "None",
         });
         res.cookie("refreshToken", refreshToken, {
           httpOnly: true,
-          secure: true,
-          sameSite: "None",
+          // secure: true,
+          // sameSite: "None",
         });
 
         res.status(200).json({
@@ -140,13 +140,13 @@ const refresh = asyncHand((req, res) => {
 
   res.cookie("token", token, {
     httpOnly: true,
-    // secure: true,
-    // sameSite: "None",
+    secure: true,
+    sameSite: "None",
   });
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
-    // secure: true,
-    // sameSite: "None",
+    secure: true,
+    sameSite: "None",
   });
   res.sendStatus(200);
 });
@@ -364,7 +364,7 @@ const signUp = asyncHand(async (req, res) => {
           } else if (parseInt(formData.user_type, 10) === 4) {
             console.log("Registering as Vendor...");
             const insertVendorQuery =
-              "INSERT INTO vendors (uid, name, email, phone_number, profile_img) VALUES (?, ?, ?, ?, ?)";
+              "INSERT INTO vendors (uid, name, email, phone_number) VALUES (?, ?, ?, ?)";
 
             connection.query(
               insertVendorQuery,
@@ -373,7 +373,6 @@ const signUp = asyncHand(async (req, res) => {
                 formData.name,
                 formData.email,
                 formData.phone_number,
-                formData.profile_img || null,
               ],
               (err) => {
                 if (err) {

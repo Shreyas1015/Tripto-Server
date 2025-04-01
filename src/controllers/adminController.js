@@ -401,6 +401,150 @@ const getPassengerDetails = asyncHand((req, res) => {
   });
 });
 
+const getAllPassengerTrips = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const query =
+      "SELECT b.*, p.* FROM bookings AS b JOIN passengers AS p ON p.uid = b.uid";
+    connection.query(query, (err, result) => {
+      if (err) {
+        console.error("Error fetching passenger trip details:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Passenger Trips not found" });
+      }
+
+      res.status(200).json(result);
+    });
+  });
+});
+
+const getAllDrivers = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const query =
+      "SELECT d.*, u.name AS driver_name, u.phone_number, u.user_status, u.created_at, u.email, dcd.car_name, dcd.model_year, dcd.car_number, dcd.car_type, dcd.submit_status, GROUP_CONCAT(DISTINCT CONCAT('Rating: ', dr.rating, ' - ', dr.review) ORDER BY dr.created_at DESC SEPARATOR ' | ') AS reviews FROM drivers d LEFT JOIN users u ON d.uid = u.uid LEFT JOIN ( SELECT DISTINCT dcd_id, uid, car_name, model_year, car_number, car_type, submit_status FROM drivers_car_details ) dcd ON d.uid = dcd.uid LEFT JOIN driver_reviews dr ON d.did = dr.did GROUP BY d.did, dcd.dcd_id, dcd.car_name, dcd.model_year, dcd.car_number, dcd.car_type, dcd.submit_status; ";
+    connection.query(query, (err, result) => {
+      if (err) {
+        console.error("Error fetching drivers  details:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Driver Details not found" });
+      }
+
+      res.status(200).json(result);
+    });
+  });
+});
+
+const updateTripStatus = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, bid, trip_status } = req.body;
+    console.log("Received from admin update status :", bid, trip_status); // Log the received UID
+    const query = "update bookings set trip_status = ? where bid = ?";
+    connection.query(query, [trip_status, bid], (err, result) => {
+      if (err) {
+        console.error("Error updating trip status:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      res.status(200).json({ message: "Trip status updated successfully" });
+    });
+  });
+});
+
+const updateDriverStatus = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, user_status } = req.body;
+
+    console.log(
+      "Received from admin update status :",
+      decryptedUID,
+      user_status
+    ); // Log the received UID
+    const query = "update users set user_status = ? where uid = ?";
+    connection.query(query, [user_status, decryptedUID], (err, result) => {
+      if (err) {
+        console.error("Error updating user status:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      res.status(200).json({ message: "User status updated successfully" });
+    });
+  });
+});
+
+const deleteTrip = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, bid } = req.body;
+    console.log("Received from admin delete status :", bid); // Log the received UID
+    const query = "DELETE FROM bookings where bid = ?";
+    connection.query(query, [bid], (err, result) => {
+      if (err) {
+        console.error("Error deleting trip:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      res.status(200).json({ message: "Trip deleted successfully" });
+    });
+  });
+});
+
+const deleteDriver = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, driver_uid } = req.body;
+
+    if (!decryptedUID) {
+      return res
+        .status(400)
+        .json({ error: "Invalid request. UID is required." });
+    }
+
+    connection.beginTransaction((err) => {
+      if (err) {
+        console.error("Error starting transaction:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      const queries = [
+        "DELETE FROM driver_reviews WHERE did IN (SELECT did FROM drivers WHERE uid = ?)",
+        "DELETE FROM drivers_car_details WHERE uid = ?",
+        "DELETE FROM drivers WHERE uid = ?",
+        "DELETE FROM users WHERE uid = ?",
+      ];
+
+      const executeQuery = (index) => {
+        if (index >= queries.length) {
+          connection.commit((err) => {
+            if (err) {
+              return connection.rollback(() => {
+                console.error("Transaction commit failed:", err);
+                res.status(500).json({ error: "Internal Server Error" });
+              });
+            }
+            res.status(200).json({ message: "Driver deleted successfully" });
+          });
+          return;
+        }
+
+        connection.query(queries[index], [driver_uid], (err, result) => {
+          if (err) {
+            return connection.rollback(() => {
+              console.error("Error executing query:", err);
+              res.status(500).json({ error: "Internal Server Error" });
+            });
+          }
+          executeQuery(index + 1);
+        });
+      };
+
+      executeQuery(0);
+    });
+  });
+});
+
 module.exports = {
   fetchAllDriversList,
   fetchAdminParticularDriverDocuments,
@@ -412,4 +556,10 @@ module.exports = {
   deletePassenger,
   updatePassengerStatus,
   getPassengerDetails,
+  getAllPassengerTrips,
+  updateTripStatus,
+  deleteTrip,
+  getAllDrivers,
+  updateDriverStatus,
+  deleteDriver,
 };
