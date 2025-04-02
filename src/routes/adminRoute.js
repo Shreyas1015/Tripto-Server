@@ -18,6 +18,12 @@ const {
   getAllDrivers,
   updateDriverStatus,
   deleteDriver,
+  getAllVendors,
+  fetchAdminParticularVendorDocuments,
+  handleVendorDocumentStatusChange,
+  handleAllVendorDocsStatus,
+  fetchAllVendorsList,
+  getVendorFleetStats,
 } = require("../controllers/adminController");
 const router = express.Router();
 
@@ -44,6 +50,24 @@ router.post("/deleteTrip", authenticateToken, deleteTrip);
 router.post("/getAllDrivers", authenticateToken, getAllDrivers);
 router.post("/updateDriverStatus", authenticateToken, updateDriverStatus);
 router.post("/deleteDriver", authenticateToken, deleteDriver);
+router.post("/getAllVendors", authenticateToken, getAllVendors);
+router.post("/getVendorFleetStats", authenticateToken, getVendorFleetStats);
+router.post(
+  "/handleAllVendorDocsStatus",
+  authenticateToken,
+  handleAllVendorDocsStatus
+);
+router.post("/fetchAllVendorsList", authenticateToken, fetchAllVendorsList);
+router.post(
+  "/handleVendorDocumentStatusChange",
+  authenticateToken,
+  handleVendorDocumentStatusChange
+);
+router.post(
+  "/fetchAdminParticularVendorDocuments",
+  authenticateToken,
+  fetchAdminParticularVendorDocuments
+);
 router.delete("/deleteAdminPassenger", authenticateToken, deletePassenger);
 
 module.exports = router;

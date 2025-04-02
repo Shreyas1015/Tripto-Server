@@ -20,6 +20,20 @@ const fetchAllDriversList = asyncHand((req, res) => {
   });
 });
 
+const fetchAllVendorsList = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const query = `select * from users as u join vendors as v on v.uid = u.uid`;
+    connection.query(query, (err, result) => {
+      if (err) {
+        console.error("Internal Server Error", err);
+        res.status(500).json({ error: "Internal Server Error" });
+      } else {
+        res.status(200).json(result);
+      }
+    });
+  });
+});
+
 const fetchAdminParticularDriverDocuments = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { driverId } = req.body;
@@ -37,12 +51,50 @@ const fetchAdminParticularDriverDocuments = asyncHand((req, res) => {
   });
 });
 
+const fetchAdminParticularVendorDocuments = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { vendorId } = req.body;
+
+    const query = `select * from users as u join vendors as v on v.uid = u.uid where v.vid = ?`;
+    connection.query(query, vendorId, (err, result) => {
+      if (err) {
+        console.error("Internal Server Error", err);
+        res.status(500).json({ error: "Internal Server Error" });
+      } else {
+        console.log(result);
+        res.status(200).json(result);
+      }
+    });
+  });
+});
+
 const handleAllDocsStatus = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { driverId, newStatus } = req.body;
 
     const updateQuery = `UPDATE drivers SET all_documents_status = ? WHERE did = ?`;
     connection.query(updateQuery, [newStatus, driverId], (err, result) => {
+      if (err) {
+        console.error("Internal Server Error", err);
+        res.status(500).json({ error: "Internal Server Error" });
+      } else {
+        console.log("Updated all_documents_status:", result);
+        const statusToSend = newStatus === 1 ? 1 : 2;
+        res.status(200).json({
+          message: "All documents status updated successfully",
+          status: statusToSend,
+        });
+      }
+    });
+  });
+});
+
+const handleAllVendorDocsStatus = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { vendorId, newStatus } = req.body;
+
+    const updateQuery = `UPDATE vendors SET all_documents_status = ? WHERE vid = ?`;
+    connection.query(updateQuery, [newStatus, vendorId], (err, result) => {
       if (err) {
         console.error("Internal Server Error", err);
         res.status(500).json({ error: "Internal Server Error" });
@@ -127,6 +179,90 @@ const handleDocumentStatusChange = asyncHand((req, res) => {
                 connection.query(
                   fetchUpdatedRowQuery,
                   [driverId],
+                  (fetchErr, fetchResult) => {
+                    if (fetchErr) {
+                      console.error("Internal Server Error", fetchErr);
+                      res.status(500).json({ error: "Internal Server Error" });
+                    } else {
+                      console.log("Updated Row:", fetchResult);
+                      res.status(200).json({
+                        message: "Document status updated successfully",
+                        updatedRow: fetchResult,
+                      });
+                    }
+                  }
+                );
+              }
+            }
+          );
+        }
+      }
+    });
+  });
+});
+
+const handleVendorDocumentStatusChange = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { documentKey, newStatus, reason, vendorId } = req.body;
+    console.log(req.body);
+
+    // Mapping function
+    function getRejectReasonColumn(documentKey) {
+      const mapping = {
+        aadharFrontStatus: "aadharFrontRejectReason",
+        aadharBackStatus: "aadharBackRejectReason",
+        panCardFrontStatus: "panCardFrontRejectReason",
+        profilePhotoStatus: "profilePhotoRejectReason",
+        udyamAadharStatus: "udyamAadharRejectReason",
+        ghumastaLicenseStatus: "ghumastaLicenseRejectReason",
+      };
+      return mapping[documentKey];
+    }
+
+    // Validate input
+    if (!documentKey) {
+      return res.status(400).json({ error: "documentKey is required" });
+    }
+
+    const rejectReasonColumn = getRejectReasonColumn(documentKey);
+    if (!rejectReasonColumn) {
+      return res.status(400).json({ error: "Invalid documentKey" });
+    }
+
+    const reasonUpdatedAtColumn = `${documentKey.replace(
+      "Status",
+      "Reason_updated_at"
+    )}`;
+
+    const selectQuery = `SELECT * FROM users AS u JOIN vendors AS v ON v.uid = u.uid WHERE v.vid = ?`;
+    connection.query(selectQuery, [vendorId], (err, result) => {
+      if (err) {
+        console.error("Internal Server Error", err);
+        res.status(500).json({ error: "Internal Server Error" });
+      } else {
+        if (result.length === 0) {
+          res.status(404).json({ error: "Vendor not found" });
+        } else {
+          const updateQuery = `UPDATE vendors SET ?? = ?, ?? = ?, ?? = NOW() WHERE vid = ?`;
+          connection.query(
+            updateQuery,
+            [
+              documentKey,
+              newStatus,
+              rejectReasonColumn,
+              reason,
+              reasonUpdatedAtColumn,
+              vendorId,
+            ],
+            (updateErr, updateResult) => {
+              if (updateErr) {
+                console.error("Internal Server Error", updateErr);
+                res.status(500).json({ error: "Internal Server Error" });
+              } else {
+                const fetchUpdatedRowQuery = `SELECT * FROM vendors WHERE vid = ?`;
+                connection.query(
+                  fetchUpdatedRowQuery,
+                  [vendorId],
                   (fetchErr, fetchResult) => {
                     if (fetchErr) {
                       console.error("Internal Server Error", fetchErr);
@@ -439,6 +575,25 @@ const getAllDrivers = asyncHand((req, res) => {
   });
 });
 
+const getAllVendors = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const query =
+      "SELECT v.* , u.name AS vendor_name, u.phone_number, u.user_status, u.created_at, u.email FROM vendors v JOIN users u ON v.uid = u.uid";
+    connection.query(query, (err, result) => {
+      if (err) {
+        console.error("Error fetching vendor  details:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      if (result.length === 0) {
+        return res.status(404).json({ error: "vendor Details not found" });
+      }
+
+      res.status(200).json(result);
+    });
+  });
+});
+
 const updateTripStatus = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID, bid, trip_status } = req.body;
@@ -472,6 +627,21 @@ const updateDriverStatus = asyncHand((req, res) => {
       }
 
       res.status(200).json({ message: "User status updated successfully" });
+    });
+  });
+});
+
+const getVendorFleetStats = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const query =
+      "WITH revenue_trend AS ( SELECT DATE(created_at) AS revenue_date, SUM(amount) AS daily_revenue FROM transactions WHERE status = 1 GROUP BY revenue_date ORDER BY revenue_date DESC ) SELECT (SELECT COUNT(*) FROM vendors) AS totalVendors, (SELECT COUNT(*) FROM vendors WHERE all_documents_status = 1) AS activeVendors, (SELECT COUNT(*) FROM vendors WHERE all_documents_status = 0) AS pendingVendors, (SELECT COUNT(*) FROM bookings WHERE vid IS NOT NULL) AS totalBookings, (SELECT SUM(amount) FROM transactions WHERE status = 1) AS totalRevenue, (SELECT ((daily_revenue - LAG(daily_revenue) OVER (ORDER BY revenue_date)) / NULLIF(LAG(daily_revenue) OVER (ORDER BY revenue_date), 0)) * 100 FROM revenue_trend LIMIT 1) AS revenueChange";
+    connection.query(query, (err, result) => {
+      if (err) {
+        console.error("Error updating user status:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      res.status(200).json(result);
     });
   });
 });
@@ -562,4 +732,10 @@ module.exports = {
   getAllDrivers,
   updateDriverStatus,
   deleteDriver,
+  getAllVendors,
+  fetchAdminParticularVendorDocuments,
+  handleVendorDocumentStatusChange,
+  handleAllVendorDocsStatus,
+  fetchAllVendorsList,
+  getVendorFleetStats,
 };

@@ -333,8 +333,9 @@ const fetchDocLinks = asyncHand((req, res) => {
 const documentUpload = asyncHand(async (req, res) => {
   authenticateUser(req, res, () => {
     const formData = req.body.formData;
+    const uid = formData.uid;
 
-    // Define the list of fields that should have the corresponding _updated_at timestamp
+    // Define document fields
     const documentFields = [
       "aadharFront",
       "aadharBack",
@@ -344,102 +345,95 @@ const documentUpload = asyncHand(async (req, res) => {
       "ghumastaLicense",
     ];
 
+    // Check if vendor exists
     const selectQuery = "SELECT * FROM vendors WHERE uid = ?";
-    connection.query(selectQuery, [formData.uid], (selectErr, selectResult) => {
+    connection.query(selectQuery, [uid], (selectErr, selectResult) => {
       if (selectErr) {
-        console.error(`Error in selecting data from the table: ${selectErr}`);
-        res.status(500).json({ message: "Internal Server Error" });
+        console.error("Error fetching vendor data:", selectErr);
+        return res.status(500).json({ message: "Internal Server Error" });
+      }
+
+      if (selectResult.length === 0) {
+        // First-time insert
+        const insertFields = [];
+        const insertValues = [];
+        const placeholders = [];
+
+        Object.keys(formData).forEach((key) => {
+          if (formData[key] !== null) {
+            insertFields.push(key);
+            insertValues.push(formData[key]);
+            placeholders.push("?");
+
+            // Add updated timestamp for document fields
+            if (documentFields.includes(key)) {
+              insertFields.push(`${key}_updated_at`);
+              placeholders.push("NOW()");
+            }
+          }
+        });
+
+        const insertQuery = `
+          INSERT INTO vendors (${insertFields.join(", ")})
+          VALUES (${placeholders.join(", ")})
+        `;
+
+        connection.query(
+          insertQuery,
+          insertValues,
+          (insertErr, insertResult) => {
+            if (insertErr) {
+              console.error("Error inserting vendor documents:", insertErr);
+              return res.status(500).json({ message: "Internal Server Error" });
+            }
+            res
+              .status(200)
+              .json({ message: "Documents Uploaded Successfully" });
+          }
+        );
       } else {
-        if (selectResult.length > 0) {
-          // Generate the update query fields
-          const updateFields = Object.keys(formData)
-            .filter((key) => formData[key] !== null)
-            .map((key) => {
-              // Check if the field is in the documentFields list and should have an _updated_at timestamp
-              if (documentFields.includes(key)) {
-                return `${key} = ?, ${key}_updated_at = NOW()`;
-              }
-              return `${key} = ?`;
-            })
-            .join(", ");
+        // Vendor exists - update rejected documents only
+        const vendor = selectResult[0];
+        const updateFields = [];
+        const updateValues = [];
 
-          // Update values excluding null values
-          const updateValues = Object.values(formData).filter(
-            (value) => value !== null
-          );
+        documentFields.forEach((field) => {
+          const statusField = `${field}Status`;
+          const reasonField = `${field}RejectReason`;
 
-          // Add the uid for the WHERE clause
-          updateValues.push(formData.uid);
+          if (formData[field] && vendor[statusField] === 2) {
+            updateFields.push(
+              `${field} = ?, ${statusField} = 0, ${reasonField} = NULL, ${field}_updated_at = NOW()`
+            );
+            updateValues.push(formData[field]);
+          }
+        });
 
-          const updateQuery = `
+        if (updateFields.length === 0) {
+          return res
+            .status(400)
+            .json({ message: "No rejected documents found for update" });
+        }
+
+        updateValues.push(uid);
+
+        const updateQuery = `
           UPDATE vendors
-          SET ${updateFields}
+          SET ${updateFields.join(", ")}
           WHERE uid = ?
         `;
 
-          connection.query(
-            updateQuery,
-            updateValues,
-            (updateErr, updateResult) => {
-              if (updateErr) {
-                console.error(
-                  `Error in updating data in the table: ${updateErr}`
-                );
-                res.status(500).json({ message: "Internal Server Error" });
-              } else {
-                console.log(updateResult);
-                console.log("Document Updated Successfully");
-                res
-                  .status(200)
-                  .json({ message: "Document Updated Successfully" });
-              }
+        connection.query(
+          updateQuery,
+          updateValues,
+          (updateErr, updateResult) => {
+            if (updateErr) {
+              console.error("Error updating vendor documents:", updateErr);
+              return res.status(500).json({ message: "Internal Server Error" });
             }
-          );
-        } else {
-          // Insert new records, excluding _updated_at fields for uid and dcd_id
-          const insertData = { ...formData };
-
-          // Add _updated_at timestamps for the specific document fields
-          const insertFields = [];
-          const insertPlaceholders = [];
-          const insertValues = [];
-
-          for (const [key, value] of Object.entries(insertData)) {
-            insertFields.push(key);
-            insertPlaceholders.push("?");
-            insertValues.push(value);
-
-            // If the key is in the documentFields list, add an _updated_at field
-            if (documentFields.includes(key)) {
-              insertFields.push(`${key}_updated_at`);
-              insertPlaceholders.push("NOW()");
-            }
+            res.status(200).json({ message: "Documents Updated Successfully" });
           }
-
-          const insertQuery = `
-            INSERT INTO vendors (${insertFields.join(", ")})
-            VALUES (${insertPlaceholders.join(", ")})
-          `;
-
-          connection.query(
-            insertQuery,
-            insertValues,
-            (insertErr, insertResult) => {
-              if (insertErr) {
-                console.error(
-                  `Error in inserting data to the table: ${insertErr}`
-                );
-                res.status(500).json({ message: "Internal Server Error" });
-              } else {
-                console.log(insertResult);
-                console.log("Documents Uploaded Successfully");
-                res
-                  .status(200)
-                  .json({ message: "Documents Uploaded Successfully" });
-              }
-            }
-          );
-        }
+        );
       }
     });
   });
