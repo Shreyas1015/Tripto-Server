@@ -100,13 +100,13 @@ const login = asyncHand((req, res) => {
 
         res.cookie("token", token, {
           httpOnly: true,
-          // secure: true,
-          // sameSite: "None",
+           secure: true,
+           sameSite: "None",
         });
         res.cookie("refreshToken", refreshToken, {
           httpOnly: true,
-          // secure: true,
-          // sameSite: "None",
+           secure: true,
+           sameSite: "None",
         });
 
         res.status(200).json({
