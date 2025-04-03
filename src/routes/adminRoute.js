@@ -24,6 +24,13 @@ const {
   handleAllVendorDocsStatus,
   fetchAllVendorsList,
   getVendorFleetStats,
+  getVendorRevenueTrend,
+  getVendorBookingTrend,
+  getPaymentMethodDistribution,
+  getTopVendors,
+  getRecentVendorTransactions,
+  getFleetAllVendors,
+  getDocumentVerificationStats,
 } = require("../controllers/adminController");
 const router = express.Router();
 
@@ -52,12 +59,19 @@ router.post("/updateDriverStatus", authenticateToken, updateDriverStatus);
 router.post("/deleteDriver", authenticateToken, deleteDriver);
 router.post("/getAllVendors", authenticateToken, getAllVendors);
 router.post("/getVendorFleetStats", authenticateToken, getVendorFleetStats);
+router.post("/getVendorRevenueTrend", authenticateToken, getVendorRevenueTrend);
 router.post(
   "/handleAllVendorDocsStatus",
   authenticateToken,
   handleAllVendorDocsStatus
 );
 router.post("/fetchAllVendorsList", authenticateToken, fetchAllVendorsList);
+router.post("/getVendorBookingTrend", authenticateToken, getVendorBookingTrend);
+router.post("/getPaymentMethodDistribution", authenticateToken, getPaymentMethodDistribution);
+router.post("/getTopVendors", authenticateToken, getTopVendors);
+router.post("/getRecentVendorTransactions", authenticateToken, getRecentVendorTransactions);
+router.post("/getFleetAllVendors", authenticateToken, getFleetAllVendors);
+router.post("/getDocumentVerificationStats", authenticateToken, getDocumentVerificationStats);
 router.post(
   "/handleVendorDocumentStatusChange",
   authenticateToken,
