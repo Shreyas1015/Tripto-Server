@@ -8,7 +8,6 @@ const {
   getPassengerStats,
   fetchPassengers,
   exportPassengersData,
-
   updatePassengerStatus,
   getPassengerDetails,
   deletePassenger,
@@ -31,10 +30,19 @@ const {
   getRecentVendorTransactions,
   getFleetAllVendors,
   getDocumentVerificationStats,
+  fetchQuickStats,
+  fetchTripData,
+  fetchRevenueData,
+  fetchCancellationData,
+  fetchPaymentData,
+  fetchAllTransactions,
+  fetchAllWallets,
+  fetchAllBookings,
 } = require("../controllers/adminController");
 const router = express.Router();
 
 router.post("/fetchAllDriversList", authenticateToken, fetchAllDriversList);
+router.post("/fetchAllTransactions", authenticateToken, fetchAllTransactions);
 router.post(
   "/fetchAdminParticularDriverDocuments",
   authenticateToken,
@@ -47,6 +55,7 @@ router.post(
 );
 router.post("/handleAllDocsStatus", authenticateToken, handleAllDocsStatus);
 router.post("/getPassengerStats", authenticateToken, getPassengerStats);
+router.post("/fetchRevenueData", authenticateToken, fetchRevenueData);
 router.post("/fetchPassengers", authenticateToken, fetchPassengers);
 router.post("/exportPassengersData", authenticateToken, exportPassengersData);
 router.post("/updatePassengerStatus", authenticateToken, updatePassengerStatus);
@@ -72,6 +81,13 @@ router.post("/getTopVendors", authenticateToken, getTopVendors);
 router.post("/getRecentVendorTransactions", authenticateToken, getRecentVendorTransactions);
 router.post("/getFleetAllVendors", authenticateToken, getFleetAllVendors);
 router.post("/getDocumentVerificationStats", authenticateToken, getDocumentVerificationStats);
+router.post("/fetchQuickStats", authenticateToken, fetchQuickStats);
+router.post("/fetchTripData", authenticateToken, fetchTripData);
+router.post("/fetchCancellationData", authenticateToken, fetchCancellationData);
+router.post("/fetchPaymentData", authenticateToken, fetchPaymentData);
+router.post("/fetchAllWallets", authenticateToken, fetchAllWallets);
+router.post("/fetchAllBookings", authenticateToken, fetchAllBookings);
+
 router.post(
   "/handleVendorDocumentStatusChange",
   authenticateToken,

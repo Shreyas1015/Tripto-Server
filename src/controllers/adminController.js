@@ -1138,9 +1138,391 @@ const getDocumentVerificationStats = asyncHand(async (req, res) => {
 });
 
 
+const fetchQuickStats = asyncHand(async (req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+    console.log("Fetching Quick Stats for Admin UID:", decryptedUID);
+
+    // Queries for each stat
+    const queries = {
+      totalTrips: `SELECT COUNT(*) AS totalTrips FROM bookings WHERE trip_status = 5`, // Completed trips
+      revenue: `SELECT COALESCE(SUM(amount), 0) AS revenue FROM transactions WHERE status = 1`, // Successful transactions
+      activeDrivers: `SELECT COUNT(*) AS activeDrivers FROM drivers WHERE driver_status = 1`, // Active drivers
+      cancelledTrips: `SELECT COUNT(*) AS cancelledTrips FROM bookings WHERE trip_status IN (6, 7)`, // Cancelled trips
+      totalTripsForRate: `SELECT COUNT(*) AS totalTrips FROM bookings`, // Total trips for rate calculation
+    };
+
+    let quickStats = {
+      totalTrips: 0,
+      revenue: 0,
+      activeDrivers: 0,
+      cancellationRate: 0,
+    };
+
+    // Execute queries sequentially
+    connection.query(queries.totalTrips, (err, results) => {
+      if (err) return res.status(500).json({ error: "Internal Server Error" });
+      quickStats.totalTrips = results[0]?.totalTrips || 0;
+
+      connection.query(queries.revenue, (err, results) => {
+        if (err) return res.status(500).json({ error: "Internal Server Error" });
+        quickStats.revenue = parseFloat(results[0]?.revenue || 0);
+
+        connection.query(queries.activeDrivers, (err, results) => {
+          if (err) return res.status(500).json({ error: "Internal Server Error" });
+          quickStats.activeDrivers = results[0]?.activeDrivers || 0;
+
+          connection.query(queries.cancelledTrips, (err, results) => {
+            if (err) return res.status(500).json({ error: "Internal Server Error" });
+            const cancelledTrips = results[0]?.cancelledTrips || 0;
+
+            connection.query(queries.totalTripsForRate, (err, results) => {
+              if (err) return res.status(500).json({ error: "Internal Server Error" });
+              const totalTripsForRate = results[0]?.totalTrips || 1; // Avoid division by zero
+
+              quickStats.cancellationRate = parseFloat(
+                ((cancelledTrips / totalTripsForRate) * 100).toFixed(1)
+              );
+
+              console.log("Quick Stats Data:", quickStats);
+              res.status(200).json(quickStats);
+            });
+          });
+        });
+      });
+    });
+  });
+
+});
+
+const fetchTripData = asyncHand(async (req, res) => {
+  authenticateUser(req, res, () => {
+    const { timeFrame, decryptedUID } = req.body.params;
+    console.log(`Fetching Trip Data - Time Frame: ${timeFrame}, Admin UID: ${decryptedUID}`);
+
+    let groupBy;
+    switch (timeFrame) {
+      case "daily":
+        groupBy = "DATE(b.pickup_date_time)";
+        break;
+      case "weekly":
+        groupBy = "YEARWEEK(b.pickup_date_time)";
+        break;
+      case "monthly":
+      default:
+        groupBy = "DATE_FORMAT(b.pickup_date_time, '%Y-%m')";
+        break;
+    }
+
+    // SQL query to fetch completed & cancelled trip data
+    const query = `
+      SELECT 
+        ${groupBy} AS date, 
+        COUNT(CASE WHEN b.trip_status = 5 THEN 1 END) AS completed,
+        COUNT(CASE WHEN b.trip_status IN (6, 7) THEN 1 END) AS cancelled
+      FROM bookings b
+      WHERE b.pickup_date_time >= DATE_SUB(NOW(), INTERVAL 1 YEAR) 
+      GROUP BY date 
+      ORDER BY date ASC;
+    `;
+
+    connection.query(query, (err, results) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      console.log("Trip Data Fetched:", results);
+      res.status(200).json(results);
+    });
+  });
+
+});
+
+const fetchRevenueData = asyncHand(async (req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+    console.log(`Fetching Revenue Data - Admin UID: ${decryptedUID}`);
+
+    // SQL query to fetch revenue grouped by pickup location (region) and month
+    const query = `
+      SELECT 
+        b.pickup_location AS region, 
+        DATE_FORMAT(b.pickup_date_time, '%Y-%m') AS date,
+        SUM(t.amount) AS total_revenue
+      FROM bookings b
+      JOIN transactions t ON b.bid = t.bid  -- Linking transactions to bookings
+      WHERE t.status = 1  -- Only count completed transactions
+      AND b.pickup_date_time >= DATE_SUB(NOW(), INTERVAL 1 YEAR)
+      GROUP BY region, date
+      ORDER BY region, date ASC;
+    `;
+
+    connection.query(query, (err, results) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      // Transform data into region-wise structure
+      const revenueData = {};
+      results.forEach((row) => {
+        if (!revenueData[row.region]) {
+          revenueData[row.region] = [];
+        }
+        revenueData[row.region].push({
+          date: row.date,
+          total_revenue: parseFloat(row.total_revenue) || 0,
+        });
+      });
+
+      console.log("Revenue Data Fetched:", revenueData);
+      res.status(200).json(revenueData);
+    });
+  });
+});
+
+const fetchCancellationData = asyncHand(async (req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+    console.log(`Fetching Cancellation Data - Admin UID: ${decryptedUID}`);
+
+    // SQL query to fetch and count cancellation reasons
+    const query = `
+      SELECT 
+        cancellation_reason AS reason, 
+        COUNT(*) AS count 
+      FROM bookings 
+      WHERE trip_status IN (6,7) 
+      AND cancellation_reason IS NOT NULL 
+      GROUP BY cancellation_reason
+      ORDER BY count DESC;
+    `;
+
+    connection.query(query, (err, results) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      // Transform data into expected format for frontend
+      const cancellationData = results.map((row) => ({
+        name: row.reason,
+        value: row.count,
+      }));
+
+      console.log("Cancellation Data Fetched:", cancellationData);
+      res.status(200).json(cancellationData);
+    });
+  });
+});
+
+const fetchPaymentData = asyncHand(async (req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+    console.log(`Fetching Payment Data - Admin UID: ${decryptedUID}`);
+
+    // SQL query to fetch payment status summary
+    const query = `
+      SELECT 
+        SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) AS total_paid,
+        SUM(CASE WHEN status = 0 THEN amount ELSE 0 END) AS total_unpaid
+      FROM transactions;
+    `;
+
+    connection.query(query, (err, results) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ error: "No payment data found" });
+      }
+
+      const { total_paid, total_unpaid } = results[0];
+
+      // Calculate payment percentages
+      const total_amount = (total_paid || 0) + (total_unpaid || 0);
+      const paidPercentage = total_amount > 0 ? ((total_paid / total_amount) * 100).toFixed(2) : 0;
+      const unpaidPercentage = total_amount > 0 ? ((total_unpaid / total_amount) * 100).toFixed(2) : 0;
+
+      const paymentData = [
+        { name: "Paid", value: parseFloat(total_paid) || 0 },
+        { name: "Unpaid", value: parseFloat(total_unpaid) || 0 },
+      ];
+
+      const paymentPercentages = {
+        paid: parseFloat(paidPercentage),
+        unpaid: parseFloat(unpaidPercentage),
+      };
+
+      console.log("Payment Data Fetched:", { paymentData, paymentPercentages });
+
+      res.status(200).json({ paymentData, paymentPercentages });
+    });
+  });
+});
+
+const fetchAllTransactions = asyncHand(async (req, res) => {
+  authenticateUser(req, res, () => {
+    console.log("✅ [fetchAllTransactions] Authentication Passed");
+    console.log("📥 [fetchAllTransactions] Request Body:", req.body);
+
+    // SQL query to get all transactions
+    const query = `
+      SELECT 
+        txn_id, bid, pid, did, vid, amount, status, payment_mode, created_at
+      FROM transactions
+      ORDER BY created_at DESC;
+    `;
+
+    console.log("📤 [fetchAllTransactions] Executing SQL Query...");
+    connection.query(query, (err, results) => {
+      if (err) {
+        console.error("❌ [Database Error]:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      console.log("📊 [fetchAllTransactions] Raw Results from DB:", results);
+
+      if (!results || results.length === 0) {
+        console.log("⚠️ [fetchAllTransactions] No transactions found");
+        return res.status(404).json({ error: "No transactions found" });
+      }
+
+      // Process transactions & calculate revenue split
+      const transactions = results.map((transaction, index) => {
+        const amount = parseFloat(transaction.amount) || 0;
+        let adminRevenue, driverRevenue, vendorRevenue;
+
+        console.log(`🔍 [Transaction ${index + 1}] txn_id: ${transaction.txn_id}, amount: ${amount}, vid: ${transaction.vid}`);
+
+        if (transaction.vid !== null) {
+          adminRevenue = amount * 0.06;
+          driverRevenue = amount * 0.9;
+          vendorRevenue = amount * 0.04;
+        } else {
+          adminRevenue = amount * 0.1;
+          driverRevenue = amount * 0.9;
+          vendorRevenue = 0;
+        }
+
+        console.log(`💰 [Revenue Breakdown] Admin: ${adminRevenue.toFixed(2)}, Driver: ${driverRevenue.toFixed(2)}, Vendor: ${vendorRevenue.toFixed(2)}`);
+
+        return {
+          ...transaction,
+          adminRevenue: parseFloat(adminRevenue.toFixed(2)),
+          driverRevenue: parseFloat(driverRevenue.toFixed(2)),
+          vendorRevenue: parseFloat(vendorRevenue.toFixed(2)),
+        };
+      });
+
+      console.log("✅ [fetchAllTransactions] Transactions Processed:", transactions.length);
+
+      res.status(200).json({ transactions });
+    });
+  });
+});
 
 
+const fetchAllWallets = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    console.log("Fetching All Wallets...");
 
+    // SQL query to fetch wallet balances with user types
+    const query = `
+      SELECT 
+        wallet_id, balance, updated_at,
+        COALESCE(vid, pid, did, aid) AS user_id,
+        CASE 
+          WHEN vid IS NOT NULL THEN 'Vendor'
+          WHEN pid IS NOT NULL THEN 'Passenger'
+          WHEN did IS NOT NULL THEN 'Driver'
+          WHEN aid IS NOT NULL THEN 'Admin'
+          ELSE 'Unknown'
+        END AS user_type
+      FROM wallets
+      ORDER BY updated_at DESC;
+    `;
+
+    connection.query(query, (err, results) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      if (results.length === 0) {
+        // return res.status(404).json({ error: "No wallets found" });
+        console.log("No wallets found");
+      }
+
+      // Process wallet data
+      const wallets = results.map((wallet) => ({
+        walletId: wallet.wallet_id,
+        userId: wallet.user_id,
+        userType: wallet.user_type,
+        balance: parseFloat(wallet.balance) || 0,
+        lastUpdated: wallet.updated_at,
+      }));
+
+      console.log("Wallets Fetched:", wallets.length);
+
+      res.status(200).json({ wallets });
+    });
+  });
+});
+
+const fetchAllBookings = asyncHand((req, res) => {
+  authenticateUser(req, res, async () => {
+    console.log("Fetching All Bookings...");
+
+    // SQL query to fetch bookings with related details
+    const query = `
+      SELECT 
+        b.bid, b.pid, b.did, b.vid, b.selected_car, 
+        b.pickup_location, b.drop_location, b.pickup_date_time, b.drop_date_time,
+        b.trip_status, b.trip_type, b.price,
+        p.name AS passenger_name, p.phone_number AS passenger_phone
+      FROM bookings b
+      LEFT JOIN passengers p ON b.pid = p.pid
+      ORDER BY b.pickup_date_time DESC;
+    `;
+
+    connection.query(query, (err, results) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      if (results.length === 0) {
+        console.log("No bookings found");
+      }
+
+      // Process booking data
+      const bookings = results.map((booking) => ({
+        bid: booking.bid,
+        pid: booking.pid,
+        did: booking.did,
+        vid: booking.vid,
+        selectedCar: booking.selected_car,
+        pickupLocation: booking.pickup_location,
+        dropLocation: booking.drop_location,
+        pickupDateTime: booking.pickup_date_time,
+        dropDateTime: booking.drop_date_time,
+        tripStatus: booking.trip_status,
+        tripType: booking.trip_type,
+        price: parseFloat(booking.price) || 0,
+        passengerName: booking.passenger_name || `Passenger #${booking.pid}`,
+        passengerPhone: booking.passenger_phone || "N/A",
+      }));
+
+      console.log("Bookings Fetched:", bookings.length);
+
+      res.status(200).json({ bookings: bookings });
+    });
+  });
+});
 
 
 module.exports = {
@@ -1173,4 +1555,12 @@ module.exports = {
   getRecentVendorTransactions,
   getFleetAllVendors,
   getDocumentVerificationStats,
+  fetchQuickStats,
+  fetchTripData,
+  fetchRevenueData,
+  fetchCancellationData,
+  fetchPaymentData,
+  fetchAllTransactions,
+  fetchAllWallets,
+  fetchAllBookings
 };

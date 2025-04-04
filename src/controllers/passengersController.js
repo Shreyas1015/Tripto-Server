@@ -452,66 +452,55 @@ const checkDriverAssignment = asyncHand((req, res) => {
 const cancelBooking = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID, bookingId, reason } = req.body;
+    console.log("Canceling booking:", bookingId, "for user:", decryptedUID, "Reason:", reason);
 
-    if (!decryptedUID || !bookingId || !reason) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
 
-    // Check if the booking exists and belongs to the user
+
+    // Check if the booking exists and its status
     const checkBookingQuery = `
-      SELECT bid, uid, trip_status FROM bookings WHERE bid = ? AND uid = ?
+      SELECT bid, uid, trip_status FROM bookings WHERE bid = ?;
     `;
 
-    connection.query(
-      checkBookingQuery,
-      [bookingId, decryptedUID],
-      (err, results) => {
-        if (err) {
-          console.error("Error checking booking:", err);
+    connection.query(checkBookingQuery, [bookingId], (err, results) => {
+      if (err) {
+        console.error("Error checking booking:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      const booking = results[0];
+
+      // Prevent cancellation of completed or already canceled bookings
+      if (booking.trip_status === 5) {
+        return res.status(400).json({ error: "Booking is already completed" });
+      }
+      if (booking.trip_status === 6 || booking.trip_status === 7) {
+        return res.status(400).json({ error: "Booking is already canceled" });
+      }
+
+      // Update booking status to 'Canceled By Passenger' and store reason
+      const cancelBookingQuery = `
+        UPDATE bookings 
+        SET trip_status = 6, cancellation_reason = ? 
+        WHERE bid = ?;
+      `;
+
+      connection.query(cancelBookingQuery, [reason, bookingId], (updateErr) => {
+        if (updateErr) {
+          console.error("Error canceling booking:", updateErr);
           return res.status(500).json({ error: "Internal Server Error" });
         }
 
-        if (results.length === 0) {
-          return res.status(404).json({ error: "Booking not found" });
-        }
-
-        const booking = results[0];
-
-        // Check if the booking is already completed or canceled
-        if (booking.trip_status === 5) {
-          return res
-            .status(400)
-            .json({ error: "Booking is already completed" });
-        }
-        if (booking.trip_status === 6 || booking.trip_status === 7) {
-          return res.status(400).json({ error: "Booking is already canceled" });
-        }
-
-        // Update the booking status to 'Cancelled By Passenger' (status = 3)
-        const cancelBookingQuery = `
-        UPDATE bookings SET trip_status = 6 WHERE bid = ? AND uid = ?
-      `;
-
-        connection.query(
-          cancelBookingQuery,
-          [bookingId, decryptedUID],
-          (updateErr) => {
-            if (updateErr) {
-              console.error("Error canceling booking:", updateErr);
-              return res.status(500).json({ error: "Internal Server Error" });
-            }
-
-            console.log(
-              `Booking ID ${bookingId} canceled by user ${decryptedUID}`
-            );
-
-            res.status(200).json({ message: "Booking canceled successfully" });
-          }
-        );
-      }
-    );
+        console.log(`Booking ID ${bookingId} canceled by user ${decryptedUID}, Reason: ${reason}`);
+        res.status(200).json({ message: "Booking canceled successfully", reason });
+      });
+    });
   });
 });
+
 
 const getCurrentRide = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
