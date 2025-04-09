@@ -24,6 +24,13 @@ const {
   startRide,
   setPaymentOtp,
   arrivedAtPickup,
+  fetchEarnings,
+  fetchTrips,
+  fetchReviews,
+  fetchStats,
+  fetchTransactions,
+  fetchEarningsBreakdown,
+  fetchWalletBalance,
 } = require("../controllers/driversController");
 const router = express.Router();
 
@@ -39,8 +46,15 @@ router.post(
   fetchParticularDocStatus
 );
 router.post("/fetchDocumentLink", authenticateToken, fetchDocumentLink);
+router.post("/fetchEarnings", authenticateToken, fetchEarnings);
+router.post("/fetchTrips", authenticateToken, fetchTrips);
+router.post("/fetchReviews", authenticateToken, fetchReviews);
 router.post("/fetchProfileData", authenticateToken, fetchProfileData);
 router.post("/updateProfile", authenticateToken, updateProfile);
+router.post("/fetchStats", authenticateToken, fetchStats);
+router.post("/fetchWalletBalance", authenticateToken, fetchWalletBalance);
+router.post("/fetchTransactions", authenticateToken, fetchTransactions);
+router.post("/fetchEarningsBreakdown", authenticateToken, fetchEarningsBreakdown);
 router.post(
   "/sendProfileUpdateEmailVerification",
   authenticateToken,

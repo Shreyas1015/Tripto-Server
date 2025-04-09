@@ -86,7 +86,7 @@ const fetchProfileData = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID } = req.body;
 
-    const searchQuery = "Select * from users where uid = ?";
+    const searchQuery = "Select * from passengers where uid = ?";
     connection.query(searchQuery, decryptedUID, (err, result) => {
       if (err) {
         console.error(`Error executing query ${err}`);
@@ -108,9 +108,10 @@ const updateProfile = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const formData = req.body;
     console.log("FormData.uid :", formData.uid);
+    console.log("FormData :", formData);
 
     const updateQuery =
-      "UPDATE users SET name = ?, email = ?, phone_number = ? WHERE uid = ?";
+      "UPDATE users SET name = ?, email = ?, phone_number = ?  WHERE uid = ?";
     const updateValues = [
       formData.name,
       formData.email,
@@ -126,11 +127,15 @@ const updateProfile = asyncHand((req, res) => {
 
       if (formData.user_type == 2) {
         const updatePassengerQuery =
-          "UPDATE passengers SET name = ?, email = ?, phone_number = ? WHERE uid = ?";
+          "UPDATE passengers SET name = ?, email = ?, phone_number = ?, street = ?, city = ?, state = ? , zip_code = ? WHERE uid = ?";
         const updatePassengerValues = [
           formData.name,
           formData.email,
           formData.phone_number,
+          formData.street,
+          formData.city,
+          formData.state,
+          formData.zip_code,
           formData.uid,
         ];
 
@@ -361,26 +366,117 @@ const fetchPID = asyncHand((req, res) => {
   });
 });
 
-const fetchBookingsDataTable = asyncHand((req, res) => {
+const fetchPassengerTrips = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID } = req.body;
 
-    const query = `
-      SELECT bookings.*, users.name, users.email, users.phone_number 
-      FROM bookings 
-      JOIN users ON bookings.uid = users.uid 
-      WHERE bookings.uid = ? 
-      ORDER BY bookings.bid DESC
-    `;
-    connection.query(query, decryptedUID, (err, result) => {
-      if (err) {
-        console.error("Internal Server Error", err);
+    if (!decryptedUID) {
+      return res.status(400).json({ error: "Missing decryptedUID in request body" });
+    }
 
-        res.status(500).json({ error: "Internal Server Error" });
-      } else {
-        console.log("Bookings Data : ", result);
-        res.status(200).json(result);
+    console.log(`Fetching trips for Passenger ID: ${decryptedUID}`);
+
+    const query = `
+      SELECT 
+        bid,
+        pid,
+        vid,
+        did,
+        pickup_location,
+        drop_location,
+        pickup_date_time,
+        drop_date_time,
+        selected_car,
+        trip_type,
+        trip_status,
+        price,
+        distance
+      FROM bookings
+      WHERE uid = ?
+      ORDER BY pickup_date_time DESC
+    `;
+
+    connection.query(query, [decryptedUID], (err, results) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
       }
+
+      if (results.length === 0) {
+        console.log("No trips found for this passenger.");
+      }
+
+      // Format the trips
+      const trips = results.map((trip) => ({
+        bid: trip.bid,
+        pid: trip.pid,
+        vid: trip.vid,
+        did: trip.did,
+        pickup_location: trip.pickup_location,
+        drop_location: trip.drop_location,
+        pickup_date_time: trip.pickup_date_time,
+        drop_date_time: trip.drop_date_time,
+        selected_car: trip.selected_car,
+        trip_type: trip.trip_type,
+        trip_status: trip.trip_status,
+        price: parseFloat(trip.price) || 0,
+        distance: parseFloat(trip.distance) || null,
+      }));
+
+      console.log(`Fetched ${trips.length} trips for Passenger ${decryptedUID}`);
+
+      res.status(200).json(trips);
+    });
+  });
+});
+
+const fetchPassengerTransactions = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, passenger_id } = req.body;
+
+    if (!decryptedUID) {
+      return res.status(400).json({ error: "Missing decryptedUID in request body" });
+    }
+
+    console.log(`Fetching transactions for Passenger ID: ${decryptedUID}`);
+
+    const query = `
+      SELECT 
+        txn_id,
+        pid,
+        did,
+        vid,
+        bid,
+        amount,
+        status,
+        payment_mode,
+        created_at
+      FROM transactions
+      WHERE pid = ?
+      ORDER BY created_at DESC
+    `;
+
+    connection.query(query, [passenger_id], (err, results) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+
+      const transactions = results.map((txn) => ({
+        txn_id: txn.txn_id,
+        pid: txn.pid,
+        did: txn.did,
+        vid: txn.vid,
+        bid: txn.bid,
+        amount: parseFloat(txn.amount) || 0,
+        status: txn.status,
+        payment_mode: txn.payment_mode,
+        created_at: txn.created_at, // Keep this in ISO for frontend formatting
+      }));
+
+      console.log(`Fetched ${transactions.length} transactions for PID ${decryptedUID}`);
+
+      res.status(200).json(transactions);
     });
   });
 });
@@ -613,35 +709,68 @@ const completeRide = asyncHand((req, res) => {
 
 const rateDriver = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
-    const { decryptedUID, rideId, driverId, rating, review } = req.body;
+    const {
+      decryptedUID,
+      rideId,
+      driverId,
+      rating,
+      review,
+      detailedRatings = {},
+      amenities = [],
+      feedbackOptions = []
+    } = req.body;
 
     // Validation
     if (!decryptedUID || !rideId || !driverId || !rating) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    try {
-      // Insert review
-      const insertReviewQuery = `
-      INSERT INTO driver_reviews (bid, did, uid, rating, review)
-      VALUES (?, ?, ?, ?, ?)
+    const {
+      drivingSkill = null,
+      vehicleCleanliness = null,
+      navigationEfficiency = null,
+      safetyScore = null,
+      communication = null,
+      professionalism = null
+    } = detailedRatings;
+
+    const insertReviewQuery = `
+      INSERT INTO driver_reviews (
+        bid, did, uid, rating, review,
+        driving_skill, vehicle_cleanliness, navigation_efficiency, safety_score,
+        communication, professionalism,
+        amenities, feedback_options
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-      connection.query(insertReviewQuery, [
-        rideId,
-        driverId,
-        decryptedUID,
-        rating,
-        review,
-      ]);
+    const values = [
+      rideId,
+      driverId,
+      decryptedUID,
+      rating,
+      review || null,
+      drivingSkill,
+      vehicleCleanliness,
+      navigationEfficiency,
+      safetyScore,
+      communication,
+      professionalism,
+      JSON.stringify(amenities),
+      JSON.stringify(feedbackOptions)
+    ];
 
-      res.status(200).json({ message: "Review submitted successfully" });
-    } catch (error) {
-      console.error("Error inserting review:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
+    connection.query(insertReviewQuery, values, (err, result) => {
+      if (err) {
+        console.error("Error inserting review:", err);
+        return res.status(500).json({ message: "Internal server error" });
+      }
+
+      return res.status(200).json({ message: "Review submitted successfully" });
+    });
   });
 });
+
 
 const getTripStatus = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
@@ -891,7 +1020,7 @@ module.exports = {
   handleOneWayTrip,
   handleRoundTrip,
   fetchPID,
-  fetchBookingsDataTable,
+  fetchPassengerTrips,
   checkDriverAssignment,
   cancelBooking,
   getCurrentRide,
@@ -900,4 +1029,5 @@ module.exports = {
   rateDriver,
   getTripStatus,
   verifyPaymentOtp,
+  fetchPassengerTransactions
 };
