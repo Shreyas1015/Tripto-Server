@@ -317,6 +317,28 @@ const fetchProfileData = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID } = req.body;
 
+    const searchQuery = "Select * from users where uid = ?";
+    connection.query(searchQuery, decryptedUID, (err, result) => {
+      if (err) {
+        console.error(`Error executing query ${err}`);
+        res.status(500).json({ error: "Server Error" });
+      } else {
+        if (result.length === 0) {
+          res.status(404).json({ message: "No such user found." });
+        } else {
+          let data = result[0];
+          console.log("Profle Data Fetched");
+          res.status(200).json(data);
+        }
+      }
+    });
+  });
+});
+
+const fetchDriverProfileData = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID } = req.body;
+
     const searchQuery = "Select u.*,dcd.dcd_id,dcd.car_type,dcd.car_name,dcd.car_number,dcd.model_year,d.did from users as u join drivers_car_details as dcd on dcd.uid = u.uid join drivers as d on d.uid = u.uid where u.uid = ?";
     connection.query(searchQuery, decryptedUID, (err, result) => {
       if (err) {
@@ -1555,4 +1577,5 @@ module.exports = {
   fetchTransactions,
   fetchEarningsBreakdown,
   fetchWalletBalance,
+  fetchDriverProfileData
 };
