@@ -472,9 +472,10 @@ const handleOneWayTrip = asyncHand((req, res) => {
       formData.price,
       formData.passenger_name,
       formData.passenger_phone,
+      formData.passenger_email
     ];
     const query =
-      "INSERT INTO bookings (uid,vid,pickup_location,drop_location,pickup_date_time,trip_type,distance,selected_car,price,passenger_name,passenger_phone) VALUES (?,?,?,?,?,1,?,?,?,?,?) ";
+      "INSERT INTO bookings (uid,vid,pickup_location,drop_location,pickup_date_time,trip_type,distance,selected_car,price,passenger_name,passenger_phone,passenger_email) VALUES (?,?,?,?,?,1,?,?,?,?,?,?) ";
     connection.query(query, values, (err, result) => {
       if (err) {
         console.error(
@@ -507,10 +508,11 @@ const handleRoundTrip = asyncHand((req, res) => {
       formData.no_of_days,
       formData.passenger_name,
       formData.passenger_phone,
+      formData.passenger_email
     ];
 
     const query =
-      "INSERT INTO bookings (uid,vid,pickup_location,drop_location,pickup_date_time,drop_date_time,trip_type,distance,selected_car,price,no_of_days,passenger_name,passenger_phone) VALUES (?,?,?,?,?,?,2,?,?,?,?,?,?)";
+      "INSERT INTO bookings (uid,vid,pickup_location,drop_location,pickup_date_time,drop_date_time,trip_type,distance,selected_car,price,no_of_days,passenger_name,passenger_phone, passenger_email) VALUES (?,?,?,?,?,?,2,?,?,?,?,?,?,?) ";
     connection.query(query, values, (err, result) => {
       if (err) {
         console.error(
@@ -533,13 +535,14 @@ const fetchVendorBookingsData = asyncHand((req, res) => {
       return res.status(400).json({ error: "Vendor ID is required" });
     }
 
-    const query = `SELECT * FROM bookings WHERE uid = ?`;
+    const query = `SELECT b.*, u.name AS driver_name FROM bookings b LEFT JOIN drivers d ON b.did = d.did LEFT JOIN users u ON d.uid = u.uid WHERE b.uid = ? order by b.bid DESC`;
 
     connection.query(query, [decryptedUID], (err, results) => {
       if (err) {
         console.error("Error fetching vendor bookings:", err);
         return res.status(500).json({ error: "Internal Server Error" });
       }
+
 
       res.status(200).json(results);
     });
@@ -587,6 +590,7 @@ const fetchVendorBookingStatusData = asyncHand((req, res) => {
     });
   });
 });
+
 const fetchVendorDriverData = asyncHand((req, res) => {
   authenticateUser(req, res, () => {
     const { decryptedUID } = req.body;

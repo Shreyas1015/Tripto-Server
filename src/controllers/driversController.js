@@ -1545,6 +1545,155 @@ const fetchWalletBalance = asyncHand((req, res) => {
   });
 });
 
+const sendVendorOtp = asyncHand(async (req, res) => {
+  const { email, passengerEmail } = req.body;
+  const userEmail = email || passengerEmail; // use whichever is available
+
+  if (!userEmail) {
+    return res.status(400).json({ success: false, message: "Email is required." });
+  }
+
+  const otp = generateOTP();
+  const query = "UPDATE bookings SET ride_otp = ? WHERE passenger_email = ?";
+
+  try {
+    connection.query(query, [otp, userEmail], (err, result) => {
+      if (err) {
+        console.error("Error saving email OTP to the database:", err);
+        return res.status(500).json({ success: false });
+      }
+
+      sendOTPEmail(userEmail, otp);
+      res.status(200).json({ success: true });
+    });
+  } catch (error) {
+    console.error("Error sending email verification code:", error);
+    res.status(500).json({ success: false });
+  }
+});
+
+const verifyPaymentOtpAndCompleteRide = asyncHand((req, res) => {
+  authenticateUser(req, res, () => {
+    const { decryptedUID, rideId, enteredOtp } = req.body;
+    console.log("Ride ID:", rideId);
+    console.log("Entered OTP:", enteredOtp);
+
+    if (!rideId || !enteredOtp) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const query = `SELECT ride_otp, trip_status, price, pid, did, vid FROM bookings WHERE bid = ?`;
+
+    connection.query(query, [rideId], (err, results) => {
+      if (err) {
+        console.error("Error fetching ride details:", err);
+        return res.status(500).json({ message: "Internal server error" });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Ride not found" });
+      }
+
+      const { ride_otp, trip_status, price, pid, did, vid } = results[0];
+
+      // Step 1: OTP Verification
+      if (String(ride_otp) !== String(enteredOtp)) {
+
+        console.error("Invalid OTP entered:", enteredOtp);
+        console.error("Expected OTP:", ride_otp);
+        return res.status(400).json({ message: "Invalid OTP" });
+      }
+
+      // Step 2: Ride must be in progress (trip_status === 4)
+      if (trip_status !== 4) {
+        return res
+          .status(400)
+          .json({ message: "Ride not in progress. Cannot complete." });
+      }
+
+      // Step 3: Update trip status
+      const updateRideQuery = `UPDATE bookings SET trip_status = 5, drop_date_time = NOW() WHERE bid = ?`;
+
+      connection.query(updateRideQuery, [rideId], (updateErr) => {
+        if (updateErr) {
+          console.error("Error updating ride status:", updateErr);
+          return res.status(500).json({ message: "Error completing ride" });
+        }
+
+        // Step 4: Insert transaction
+        const insertTxn = `
+          INSERT INTO transactions (pid, did, vid, bid, amount, status, payment_mode)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`;
+
+        connection.query(
+          insertTxn,
+          [pid, did, vid, rideId, price, 1, 1],
+          (txnErr) => {
+            if (txnErr) {
+              console.error("Error inserting transaction:", txnErr);
+              return res.status(500).json({ message: "Transaction failed" });
+            }
+
+            // Step 5: Calculate shares
+            let driverShare = 0.9 * price;
+            let adminShare = vid ? 0.06 * price : 0.1 * price;
+            let vendorShare = vid ? 0.04 * price : 0;
+
+            // Step 6: Ensure Wallets Exist
+            const ensureWallet = (id, column, callback) => {
+              const check = `SELECT balance FROM wallets WHERE ${column} = ?`;
+              connection.query(check, [id], (err, result) => {
+                if (err) return callback(err);
+                if (result.length === 0) {
+                  const insert = `INSERT INTO wallets (${column}, balance) VALUES (?, 0)`;
+                  connection.query(insert, [id], callback);
+                } else {
+                  callback(null);
+                }
+              });
+            };
+
+            const updateWallet = (amount, column, id) => {
+              const update = `UPDATE wallets SET balance = balance + ? WHERE ${column} = ?`;
+              connection.query(update, [amount, id], (err) => {
+                if (err)
+                  console.error(`Error updating ${column} wallet:`, err);
+              });
+            };
+
+            // Driver Wallet
+            ensureWallet(did, "did", (err) => {
+              if (!err) updateWallet(driverShare, "did", did);
+            });
+
+            // Admin Wallet
+            ensureWallet(1, "aid", (err) => {
+              if (!err)
+                connection.query(
+                  `UPDATE wallets SET balance = balance + ? WHERE aid IS NOT NULL LIMIT 1`,
+                  [adminShare]
+                );
+            });
+
+            // Vendor Wallet (if any)
+            if (vid) {
+              ensureWallet(vid, "vid", (err) => {
+                if (!err) updateWallet(vendorShare, "vid", vid);
+              });
+            }
+
+            // Final Response
+            return res.status(200).json({
+              message:
+                "OTP verified. Ride completed. Transaction and wallet updates done.",
+            });
+          }
+        );
+      });
+    });
+  });
+});
+
 
 module.exports = {
   fetchDcdID,
@@ -1577,5 +1726,7 @@ module.exports = {
   fetchTransactions,
   fetchEarningsBreakdown,
   fetchWalletBalance,
-  fetchDriverProfileData
+  fetchDriverProfileData,
+  sendVendorOtp,
+  verifyPaymentOtpAndCompleteRide
 };
