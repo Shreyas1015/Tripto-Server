@@ -1,0 +1,443 @@
+{
+	"info": {
+		"_postman_id": "tripto-api-collection",
+		"name": "Tripto API Collection",
+		"description": "Collection for Tripto Server API endpoints including Auth, Drivers, Passengers, Admin, and Vendors.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"user@gmail.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Signup with Verification",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"John Doe\",\n    \"email\": \"johndoe@example.com\",\n    \"phone_number\": \"1234567890\",\n    \"user_type\": 2,\n    \"profile_img\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/signup_with_verification",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"signup_with_verification"
+							]
+						}
+					}
+				},
+				{
+					"name": "Send Email Verification",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"johndoe@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/sendEmailVerification",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"sendEmailVerification"
+							]
+						}
+					}
+				},
+				{
+					"name": "Confirm Email OTP",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"johndoe@example.com\",\n    \"emailOtp\": \"123456\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/confirmEmail",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"confirmEmail"
+							]
+						}
+					}
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/refresh",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"refresh"
+							]
+						}
+					}
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"logout"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Passengers",
+			"item": [
+				{
+					"name": "Fetch Profile Data",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"decryptedUID\": 11\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/passengers/fetchProfileData",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"passengers",
+								"fetchProfileData"
+							]
+						}
+					}
+				},
+				{
+					"name": "Update Profile",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uid\": 11,\n    \"name\": \"Shreyas Gurav Updated\",\n    \"email\": \"user@gmail.com\",\n    \"phone_number\": \"454544545454\",\n    \"user_type\": 2,\n    \"street\": \"Main St\",\n    \"city\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"zip_code\": \"400001\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/passengers/updateProfile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"passengers",
+								"updateProfile"
+							]
+						}
+					}
+				},
+				{
+					"name": "Handle One Way Trip",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"decryptedUID\": 11,\n    \"formData\": {\n        \"pid\": 3,\n        \"pickup_location\": \"Andheri\",\n        \"drop_location\": \"Bandra\",\n        \"pickup_date_time\": \"2024-10-01 10:00:00\",\n        \"distance\": \"15\",\n        \"selected_car\": 1,\n        \"price\": 500\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/passengers/handleOneWayTrip",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"passengers",
+								"handleOneWayTrip"
+							]
+						}
+					}
+				},
+				{
+					"name": "Handle Round Trip",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"decryptedUID\": 11,\n    \"formData\": {\n        \"pid\": 3,\n        \"pickup_location\": \"Andheri\",\n        \"drop_location\": \"Pune\",\n        \"pickup_date_time\": \"2024-10-01 10:00:00\",\n        \"return_date_time\": \"2024-10-03 18:00:00\",\n        \"distance\": \"150\",\n        \"selected_car\": 2,\n        \"price\": 5000,\n        \"no_of_days\": 3\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/passengers/handleRoundTrip",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"passengers",
+								"handleRoundTrip"
+							]
+						}
+					}
+				},
+				{
+					"name": "Fetch Passenger Trips",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"decryptedUID\": 11\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/passengers/fetchPassengerTrips",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"passengers",
+								"fetchPassengerTrips"
+							]
+						}
+					}
+				},
+				{
+					"name": "Cancel Booking",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"decryptedUID\": 11,\n    \"bookingId\": 26,\n    \"reason\": \"Change of plans\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/passengers/cancelBooking",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"passengers",
+								"cancelBooking"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Drivers",
+			"item": [
+				{
+					"name": "Fetch Driver Profile",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"decryptedUID\": 4\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/drivers/fetchDriverProfileData",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drivers",
+								"fetchDriverProfileData"
+							]
+						}
+					}
+				},
+				{
+					"name": "Driver Accept Booking",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"did\": 1,\n    \"bookingId\": 27\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/drivers/driverAcceptBooking",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drivers",
+								"driverAcceptBooking"
+							]
+						}
+					}
+				},
+				{
+					"name": "Verify Ride Start OTP",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bookingId\": 26,\n    \"otp\": \"123456\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/drivers/verifyRideStartOtp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drivers",
+								"verifyRideStartOtp"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Fetch All Drivers",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/fetchAllDriversList",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"fetchAllDriversList"
+							]
+						}
+					}
+				},
+				{
+					"name": "Fetch Quick Stats",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/fetchQuickStats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"fetchQuickStats"
+							]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		}
+	]
+}
